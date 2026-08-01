@@ -86,59 +86,14 @@ def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path
     except (AttributeError, ValueError):
         pass
 
-    # File artifacts.
-    if badge_path:
-        badge_path.write_text(badgemod.badge_for_scan(result), encoding="utf-8")
-        click.echo(f"Wrote badge to {badge_path}", err=True)
-    if badge_json_path:
-        badge_json_path.write_text(badgemod.endpoint_json(result), encoding="utf-8")
-        click.echo(f"Wrote shields endpoint JSON to {badge_json_path}", err=True)
-    if html_path:
-        report.export(result, git_stats, str(html_path), "html")
-        click.echo(f"Wrote HTML report to {html_path}", err=True)
-    if svg_path:
-        report.export(result, git_stats, str(svg_path), "svg")
-        click.echo(f"Wrote SVG report to {svg_path}", err=True)
-    if baseline_out:
-        baseline_out.write_text(report.to_json(result, git_stats), encoding="utf-8")
-        click.echo(f"Wrote baseline snapshot to {baseline_out}", err=True)
+    _write_file_artifacts(result, git_stats,
+                          badge_path, badge_json_path, html_path, svg_path, baseline_out)
 
-    # Comparison against a baseline.
-    regression_fail = False
-    if compare_to:
-        base = json.loads(compare_to.read_text(encoding="utf-8"))
-        diff = report.compare_snapshots(report.build_payload(result, git_stats), base)
-        _print_comparison(diff)
-        if fail_on_regression and diff["regressions"]:
-            regression_fail = True
-
-    # CI gate.
-    gate_fail = False
-    if ci:
-        max_complexity = _resolve(max_complexity, cfg, "max_complexity", None)
-        max_todos = _resolve(max_todos, cfg, "max_todos", None)
-        fail_under = _resolve(fail_under, cfg, "fail_under", None)
-        ok, messages = report.evaluate_gate(result, max_complexity, max_todos, fail_under)
-        prefix = "OK  " if ok else "FAIL"
-        for m in messages:
-            click.echo(f"[{prefix}] {m}", err=not ok)
-        gate_fail = not ok
-
-    if regression_fail or gate_fail:
+    if _evaluate(result, git_stats, compare_to, fail_on_regression, ci, cfg,
+                 max_complexity, max_todos, fail_under):
         sys.exit(2)
 
-    # stdout report formats.
-    if as_json:
-        click.echo(report.to_json(result, git_stats))
-        return
-    if as_md:
-        click.echo(report.to_markdown(result, git_stats))
-        return
-    if as_csv:
-        click.echo(report.to_csv(result), nl=False)
-        return
-    if as_sarif:
-        click.echo(report.to_sarif(result))
+    if _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif):
         return
 
     # If only artifacts/gates were requested (non-interactive), stop here.
@@ -147,8 +102,60 @@ def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path
     if only_side and not sys.stdout.isatty():
         return
 
-    console = Console()
-    report.render(console, result, git_stats)
+    report.render(Console(), result, git_stats)
+
+
+def _write_file_artifacts(result, git_stats, badge_path, badge_json_path,
+                          html_path, svg_path, baseline_out) -> None:
+    artifacts = [
+        (badge_path, lambda p: p.write_text(badgemod.badge_for_scan(result), encoding="utf-8"), "badge"),
+        (badge_json_path, lambda p: p.write_text(badgemod.endpoint_json(result), encoding="utf-8"), "shields endpoint JSON"),
+        (html_path, lambda p: report.export(result, git_stats, str(p), "html"), "HTML report"),
+        (svg_path, lambda p: report.export(result, git_stats, str(p), "svg"), "SVG report"),
+        (baseline_out, lambda p: p.write_text(report.to_json(result, git_stats), encoding="utf-8"), "baseline snapshot"),
+    ]
+    for path, write, label in artifacts:
+        if path:
+            write(path)
+            click.echo(f"Wrote {label} to {path}", err=True)
+
+
+def _evaluate(result, git_stats, compare_to, fail_on_regression, ci, cfg,
+              max_complexity, max_todos, fail_under) -> bool:
+    """Run comparison and gate checks. Returns True if the run should fail."""
+    failed = False
+    if compare_to:
+        base = json.loads(compare_to.read_text(encoding="utf-8"))
+        diff = report.compare_snapshots(report.build_payload(result, git_stats), base)
+        _print_comparison(diff)
+        failed = failed or (fail_on_regression and bool(diff["regressions"]))
+    if ci:
+        ok, messages = report.evaluate_gate(
+            result,
+            _resolve(max_complexity, cfg, "max_complexity", None),
+            _resolve(max_todos, cfg, "max_todos", None),
+            _resolve(fail_under, cfg, "fail_under", None),
+        )
+        prefix = "OK  " if ok else "FAIL"
+        for m in messages:
+            click.echo(f"[{prefix}] {m}", err=not ok)
+        failed = failed or not ok
+    return failed
+
+
+def _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif) -> bool:
+    """Emit a requested stdout format. Returns True if one was emitted."""
+    if as_json:
+        click.echo(report.to_json(result, git_stats))
+    elif as_md:
+        click.echo(report.to_markdown(result, git_stats))
+    elif as_csv:
+        click.echo(report.to_csv(result), nl=False)
+    elif as_sarif:
+        click.echo(report.to_sarif(result))
+    else:
+        return False
+    return True
 
 
 def _print_comparison(diff: dict) -> None:
