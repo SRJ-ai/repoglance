@@ -9,7 +9,6 @@ language breakdown, complexity hotspots, TODO tracker, biggest files, and git
 activity. **Zero config. Zero API keys. Zero telemetry.**
 
 [![PyPI](https://img.shields.io/pypi/v/repoglance.svg)](https://pypi.org/project/repoglance/)
-[![Downloads](https://img.shields.io/pypi/dm/repoglance.svg)](https://pypi.org/project/repoglance/)
 [![CI](https://github.com/SRJ-ai/repoglance/actions/workflows/ci.yml/badge.svg)](https://github.com/SRJ-ai/repoglance/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/pypi/pyversions/repoglance.svg)](https://pypi.org/project/repoglance/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
