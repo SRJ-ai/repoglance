@@ -41,9 +41,9 @@ repoglance run against well-known projects (click to view the full report):
 
 | Project | Files | Lines of code | Health |
 |---|--:|--:|:--:|
-| [flask](assets/showcase/flask.svg) | 209 | 25,293 | D (67) |
-| [httpie](assets/showcase/httpie.svg) | 236 | 20,114 | D (66) |
-| [requests](assets/showcase/requests.svg) | 89 | 13,785 | C (72) |
+| [flask](assets/showcase/flask.svg) | 207 | 25,266 | D (67) |
+| [httpie](assets/showcase/httpie.svg) | 234 | 20,023 | D (66) |
+| [requests](assets/showcase/requests.svg) | 88 | 13,709 | C (70) |
 
 <div align="center">
 
@@ -79,6 +79,10 @@ repoglance --baseline base.json                         # snapshot now
 repoglance --compare base.json --fail-on-regression     # fail on new complexity
 repoglance --ci --fail-under 70 --max-complexity 25     # gate a build
 repoglance --include "src/**" --exclude "**/*_pb2.py"   # glob filters
+repoglance --duplicates          # detect copy-paste blocks
+repoglance --owners              # attribute hotspots to authors (git blame)
+repoglance --cache .rg.cache     # incremental cache for fast repeat runs
+repoglance --watch               # live re-render on file changes
 repoglance --no-git --jobs 8
 ```
 
@@ -97,9 +101,15 @@ repoglance --json | jq '.languages.Python.code'
 | **Languages** | Lines of code per language, ranked, with % bars |
 | **Complexity hotspots** | Real per-function cyclomatic complexity across 15+ languages (C/C++, Java, C#, JS, TS, Go, Rust, Ruby, PHP, Swift, Kotlin, Python…) via [lizard](https://github.com/terryyin/lizard) |
 | **Maintainability index** | Approximate MI (0–100) from complexity, size and token counts |
+| **Duplicate code** | Copy-paste blocks across files, with a duplication % |
 | **TODO tracker** | Every `TODO` / `FIXME` / `HACK` / `XXX` / `BUG` with file:line |
 | **Biggest files & directories** | Where the mass and the worst complexity live |
+| **Ownership** | Which author owns each hotspot (`--owners`, git blame) |
 | **Git activity** | Top authors, most-churned files, active days, project lifespan |
+
+Vendored and generated files (minified bundles, `_pb2.py`, `node_modules`, files
+marked `@generated`) are detected and excluded by default — pass
+`--include-vendored` to keep them.
 
 Binary files, `node_modules`, `.venv`, build dirs and friends are skipped
 automatically.

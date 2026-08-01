@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-01
+
+### Added
+- **Duplicate-code detection** (`--duplicates`): sliding line-window hashing
+  surfaces copy-paste blocks and a duplication percentage.
+- **Vendored/generated detection**: minified bundles, `_pb2.py`, lock files,
+  `node_modules`, and files marked `@generated` are excluded by default;
+  `--include-vendored` keeps them.
+- **Ownership** (`--owners`): attributes the top complexity hotspots to authors
+  via `git blame`.
+- **Incremental cache** (`--cache <file>`): unchanged files are reused across
+  runs by mtime + size, speeding up repeated scans.
+- **Plugin API**: third-party packages can register metrics under the
+  `repoglance.metrics` entry-point group; results appear under `plugins`.
+- **Watch mode** (`--watch`): re-render the report whenever files change.
+- Homebrew formula template and a minimal VS Code extension (Problems panel).
+
+### Fixed
+- Git subprocesses now decode as UTF-8, fixing crashes on non-Latin-1 blame
+  output on Windows.
+
 ## [0.3.0] - 2026-08-01
 
 ### Added

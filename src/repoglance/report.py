@@ -52,6 +52,8 @@ def _header(res: ScanResult, git: Optional[GitStats]) -> Panel:
                 (f"{git.first_commit} → {git.last_commit}", "dim"),
             )
         )
+    if res.vendored_files:
+        lines.append(Text(f"{res.vendored_files} vendored/generated files excluded", style="dim"))
     return Panel(Group(*lines), border_style="cyan", title="[bold]repoglance[/]", title_align="left")
 
 
@@ -191,9 +193,31 @@ def render(console: Console, res: ScanResult, git: Optional[GitStats]) -> None:
     console.print(_language_table(res))
     console.print(Columns([_hotspots_panel(res), _biggest_panel(res)], expand=True))
     console.print(_directories_panel(res))
+    if res.contents:
+        console.print(_duplicates_panel(res))
     console.print(_todos_panel(res))
     if git:
         console.print(_git_panel(git))
+
+
+def _duplicates_panel(res: ScanResult) -> Panel:
+    from .dedup import detect_duplicates
+
+    dd = detect_duplicates(res.contents)
+    table = Table.grid(padding=(0, 2))
+    table.add_column(justify="right", no_wrap=True)
+    table.add_column(justify="left")
+    if not dd.blocks:
+        body = Text("No significant duplication found.", style="dim")
+    else:
+        for b in dd.blocks[:6]:
+            locs = ", ".join(f"{p}:{l}" for p, l in b.occurrences[:3])
+            more = f" +{len(b.occurrences) - 3}" if len(b.occurrences) > 3 else ""
+            table.add_row(Text(f"x{len(b.occurrences)}", style="bold red"),
+                          Text(f"{locs}{more}", style="dim"))
+        header = Text(f"{dd.ratio * 100:.1f}% duplicated ({dd.duplicated_lines:,} lines)", style="yellow")
+        body = Group(header, Text(""), table)
+    return Panel(body, title="[bold]Duplication[/]", border_style="red", title_align="left")
 
 
 def export(res: ScanResult, git: Optional[GitStats], path: str, fmt: str) -> None:
@@ -342,7 +366,25 @@ def build_payload(res: ScanResult, git: Optional[GitStats]) -> dict:
         ],
         "directories": directory_rollup(res),
         "maintainability_index": maintainability_index(res),
+        "vendored_files": res.vendored_files,
     }
+    from .plugins import run_plugins
+    plugin_out = run_plugins(res)
+    if plugin_out:
+        payload["plugins"] = plugin_out
+    if res.contents:
+        from .dedup import detect_duplicates
+        dd = detect_duplicates(res.contents)
+        payload["duplication"] = {
+            "ratio": round(dd.ratio, 4),
+            "duplicated_lines": dd.duplicated_lines,
+            "blocks": [
+                {"lines": b.lines, "occurrences": [{"path": p, "line": l} for p, l in b.occurrences]}
+                for b in dd.blocks
+            ],
+        }
+    if getattr(res, "ownership", None):
+        payload["ownership"] = res.ownership
     if git:
         payload["git"] = {
             "total_commits": git.total_commits,

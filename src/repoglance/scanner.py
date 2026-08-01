@@ -17,6 +17,7 @@ from typing import Dict, Iterable, List, Optional
 
 from .complexity import FuncScore, analyze_complexity
 from .languages import lang_for
+from .vendored import is_vendored
 
 # Directories never worth scanning (used only on the non-git fallback path).
 IGNORE_DIRS = {
@@ -66,7 +67,11 @@ class ScanResult:
     todos: List[Todo] = field(default_factory=list)
     func_scores: List[FuncScore] = field(default_factory=list)
     skipped_binary: int = 0
+    vendored_files: int = 0
     used_gitignore: bool = False
+    contents: Dict[str, str] = field(default_factory=dict)  # rel -> text, for dedup
+    cache_entries: Dict[str, dict] = field(default_factory=dict)  # updated cache
+    ownership: Dict[str, dict] = field(default_factory=dict)  # rel -> {author, lines}
 
     @property
     def total_lines(self) -> int:
@@ -150,7 +155,7 @@ def changed_files(root: os.PathLike, since_rev: str) -> Optional[set]:
     try:
         out = subprocess.run(
             ["git", "-C", str(root_path), "diff", "--name-only", since_rev, "--"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -166,7 +171,7 @@ def _git_tracked(root: Path) -> Optional[List[str]]:
         out = subprocess.run(
             ["git", "-C", str(root), "ls-files", "--cached", "--others",
              "--exclude-standard"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -192,6 +197,9 @@ def scan(
     exclude: Optional[Iterable[str]] = None,
     changed_only: Optional[set] = None,
     jobs: Optional[int] = None,
+    include_vendored: bool = False,
+    keep_contents: bool = False,
+    cache_data: Optional[dict] = None,
 ) -> ScanResult:
     """Walk ``root`` and gather per-file line/language/complexity stats.
 
@@ -207,15 +215,62 @@ def scan(
     tracked = _git_tracked(root_path)
     if tracked is not None:
         result.used_gitignore = True
-        candidates = []
-        for rel in tracked:
-            if extra_ignores and any(part in extra_ignores for part in rel.split("/")):
-                continue
-            candidates.append(root_path / rel)
+        candidates = [
+            root_path / rel for rel in tracked
+            if not (extra_ignores and any(p in extra_ignores for p in rel.split("/")))
+        ]
     else:
         candidates = _walk(root_path, ignore)
 
-    # Pre-filter to files we will actually parse.
+    todo = _select_files(candidates, root_path, changed_only, include, exclude, result)
+
+    # Incremental cache: reuse unchanged files (skipped when contents are needed
+    # for dedup, since the cache does not store file text).
+    use_cache = cache_data is not None and not keep_contents
+    to_parse: List[Path] = []
+    if use_cache:
+        from . import cache as _cache
+        for full in todo:
+            rel = full.relative_to(root_path).as_posix()
+            try:
+                st = full.stat()
+            except OSError:
+                continue
+            entry = cache_data.get(rel)
+            if entry and entry.get("mtime") == st.st_mtime and entry.get("size") == st.st_size:
+                stat, todos, scores, vendored = _cache.rebuild(rel, entry)
+                result.cache_entries[rel] = entry
+                _absorb(result, stat, todos, scores, vendored, include_vendored, None, keep_contents)
+            else:
+                to_parse.append(full)
+    else:
+        to_parse = todo
+
+    workers = jobs or min(32, (os.cpu_count() or 4) * 4)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        processed = list(pool.map(lambda p: _process_file(p, root_path, max_bytes), to_parse))
+
+    for full, item in zip(to_parse, processed):
+        if item is None:
+            continue
+        stat, todos, scores, text, vendored = item
+        if cache_data is not None:
+            from . import cache as _cache
+            try:
+                mtime = full.stat().st_mtime
+            except OSError:
+                mtime = 0
+            result.cache_entries[stat.path] = _cache.entry_from(stat, todos, scores, vendored, mtime)
+        _absorb(result, stat, todos, scores, vendored, include_vendored, text if keep_contents else None, keep_contents)
+
+    # Deterministic output regardless of thread completion order.
+    result.files.sort(key=lambda f: f.path)
+    result.todos.sort(key=lambda t: (t.path, t.line))
+    return result
+
+
+def _select_files(candidates, root_path, changed_only, include, exclude, result) -> List[Path]:
+    """Filter candidate paths to the source files we will actually parse."""
     todo: List[Path] = []
     for full in candidates:
         fn = full.name
@@ -231,23 +286,19 @@ def scan(
         if not _glob_ok(rel, include, exclude):
             continue
         todo.append(full)
+    return todo
 
-    workers = jobs or min(32, (os.cpu_count() or 4) * 4)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        processed = list(pool.map(lambda p: _process_file(p, root_path, max_bytes), todo))
 
-    for item in processed:
-        if item is None:
-            continue
-        stat, todos, scores = item
-        result.files.append(stat)
-        result.todos.extend(todos)
-        result.func_scores.extend(scores)
-
-    # Deterministic output regardless of thread completion order.
-    result.files.sort(key=lambda f: f.path)
-    result.todos.sort(key=lambda t: (t.path, t.line))
-    return result
+def _absorb(result, stat, todos, scores, vendored, include_vendored, text, keep_contents) -> None:
+    """Add one processed/cached file's results into the ScanResult."""
+    if vendored and not include_vendored:
+        result.vendored_files += 1
+        return
+    result.files.append(stat)
+    result.todos.extend(todos)
+    result.func_scores.extend(scores)
+    if keep_contents and text is not None:
+        result.contents[stat.path] = text
 
 
 def _process_file(full: Path, root_path: Path, max_bytes: int):
@@ -266,11 +317,13 @@ def _process_file(full: Path, root_path: Path, max_bytes: int):
     rel = full.relative_to(root_path).as_posix()
     total, code, blank, comment = _count_lines(text, language)
     stat = FileStat(rel, language, total, code, blank, comment, size)
+    vendored = is_vendored(rel, text)
     todos: List[Todo] = []
     scores: List[FuncScore] = []
-    _collect_todos(text, rel, language, todos)
-    _score_complexity(text, rel, language, scores)
-    return stat, todos, scores
+    if not vendored:
+        _collect_todos(text, rel, language, todos)
+        _score_complexity(text, rel, language, scores)
+    return stat, todos, scores, text, vendored
 
 
 def _walk(root_path: Path, ignore: set):

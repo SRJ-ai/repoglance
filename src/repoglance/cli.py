@@ -40,6 +40,11 @@ def _resolve(cli_val, cfg, key, default):
 @click.option("--no-git", is_flag=True, help="Skip git history analysis.")
 @click.option("--max-bytes", type=int, default=None, help="Skip files larger than this many bytes.")
 @click.option("--jobs", type=int, default=None, help="Worker threads for scanning.")
+@click.option("--duplicates", "want_dupes", is_flag=True, help="Detect duplicated code blocks.")
+@click.option("--owners", "want_owners", is_flag=True, help="Attribute top complexity hotspots to authors (git blame).")
+@click.option("--include-vendored", is_flag=True, help="Analyze vendored/generated files instead of excluding them.")
+@click.option("--cache", "cache_path", type=click.Path(dir_okay=False, path_type=Path), help="Incremental cache file to speed up repeat runs.")
+@click.option("--watch", is_flag=True, help="Re-render the report whenever files change (Ctrl-C to stop).")
 # comparison
 @click.option("--compare", "compare_to", type=click.Path(dir_okay=False, exists=True, path_type=Path), help="Compare against a baseline snapshot and show deltas.")
 @click.option("--fail-on-regression", is_flag=True, help="Exit nonzero if --compare finds new/worse complexity.")
@@ -51,8 +56,8 @@ def _resolve(cli_val, cfg, key, default):
 @click.version_option(__version__, "-V", "--version", prog_name="repoglance")
 def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path,
          badge_json_path, baseline_out, since_rev, include, exclude, ignore, no_git,
-         max_bytes, jobs, compare_to, fail_on_regression, ci, max_complexity,
-         max_todos, fail_under):
+         max_bytes, jobs, want_dupes, want_owners, include_vendored, cache_path, watch,
+         compare_to, fail_on_regression, ci, max_complexity, max_todos, fail_under):
     """Instant, gorgeous insight into any code repository.
 
     PATH defaults to the current directory. Configuration may be supplied via
@@ -71,10 +76,17 @@ def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path
         click.echo(f"No changed files since {since_rev} (or not a git repo).", err=True)
         return
 
-    result = scan(
-        root, max_bytes=max_bytes, extra_ignores=ignores,
-        include=include, exclude=exclude, changed_only=changed, jobs=jobs,
+    scan_kwargs = dict(
+        max_bytes=max_bytes, extra_ignores=ignores, include=include, exclude=exclude,
+        changed_only=changed, jobs=jobs, include_vendored=include_vendored,
+        keep_contents=want_dupes,
     )
+
+    if watch:
+        _run_watch(root, scan_kwargs, no_git)
+        return
+
+    result = _scan_once(root, scan_kwargs, cache_path, want_owners, no_git)
     if not result.files:
         click.echo("No source files found.", err=True)
         sys.exit(1)
@@ -103,6 +115,56 @@ def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path
         return
 
     report.render(Console(), result, git_stats)
+
+
+def _scan_once(root, scan_kwargs, cache_path, want_owners, no_git):
+    """Run a single scan, applying the incremental cache and owner attribution."""
+    from . import cache as cachemod
+    from .complexity import rank_hotspots
+
+    cache_data = cachemod.load(cache_path) if cache_path else None
+    result = scan(root, cache_data=cache_data, **scan_kwargs)
+    if cache_path:
+        cachemod.save(cache_path, result.cache_entries)
+    if want_owners and not no_git and result.files:
+        paths = list(dict.fromkeys(s.path for s in rank_hotspots(result, top=10)))
+        result.ownership = gitinfo.owners(result.root, paths)
+    return result
+
+
+def _run_watch(root, scan_kwargs, no_git):
+    """Re-render the report whenever any scanned file's mtime changes."""
+    import time
+
+    console = Console()
+
+    def snapshot():
+        result = _scan_once(root, scan_kwargs, None, False, no_git)
+        git_stats = None if no_git else gitinfo.collect(result.root)
+        return result, git_stats
+
+    def fingerprint(result):
+        acc = 0.0
+        for f in result.files:
+            try:
+                acc += (root / f.path).stat().st_mtime
+            except OSError:
+                pass
+        return (len(result.files), acc)
+
+    click.echo("Watching for changes — Ctrl-C to stop.", err=True)
+    prev = None
+    try:
+        while True:
+            result, git_stats = snapshot()
+            fp = fingerprint(result)
+            if fp != prev:
+                console.clear()
+                report.render(console, result, git_stats)
+                prev = fp
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        click.echo("\nStopped.", err=True)
 
 
 def _write_file_artifacts(result, git_stats, badge_path, badge_json_path,

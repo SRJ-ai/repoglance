@@ -24,6 +24,8 @@ def _run(root: Path, args: List[str]) -> Optional[str]:
             cwd=str(root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=15,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -31,6 +33,24 @@ def _run(root: Path, args: List[str]) -> Optional[str]:
     if out.returncode != 0:
         return None
     return out.stdout
+
+
+def owners(root: Path, paths: List[str]) -> dict:
+    """Map each path to its dominant author via ``git blame`` (best-effort)."""
+    result: dict = {}
+    for rel in paths:
+        out = _run(root, ["blame", "--line-porcelain", "HEAD", "--", rel])
+        if not out:
+            continue
+        counts: dict = {}
+        for line in out.splitlines():
+            if line.startswith("author "):
+                name = line[len("author "):].strip()
+                counts[name] = counts.get(name, 0) + 1
+        if counts:
+            top = max(counts.items(), key=lambda kv: kv[1])
+            result[rel] = {"author": top[0], "lines": top[1]}
+    return result
 
 
 def collect(root: Path) -> Optional[GitStats]:

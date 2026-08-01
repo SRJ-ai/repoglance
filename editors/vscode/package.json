@@ -1,0 +1,26 @@
+{
+  "name": "repoglance",
+  "displayName": "repoglance",
+  "description": "Surface repoglance complexity hotspots in the Problems panel.",
+  "version": "0.1.0",
+  "publisher": "SRJ-ai",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Linters", "Other"],
+  "activationEvents": ["onCommand:repoglance.analyze"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "repoglance.analyze", "title": "repoglance: Analyze workspace" }
+    ],
+    "configuration": {
+      "title": "repoglance",
+      "properties": {
+        "repoglance.path": {
+          "type": "string",
+          "default": "repoglance",
+          "description": "Path to the repoglance executable."
+        }
+      }
+    }
+  }
+}
