@@ -8,9 +8,10 @@ so every file is read exactly once.
 from __future__ import annotations
 
 import fnmatch
+import functools
 import os
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -18,6 +19,10 @@ from typing import Dict, Iterable, List, Optional
 from .complexity import FuncScore, analyze_complexity
 from .languages import lang_for
 from .vendored import is_vendored
+
+# Above this many files we default to process-based parallelism: complexity
+# parsing is CPU-bound and the GIL prevents threads from using multiple cores.
+_PROCESS_THRESHOLD = 400
 
 # Directories never worth scanning (used only on the non-git fallback path).
 IGNORE_DIRS = {
@@ -198,6 +203,7 @@ def scan(
     include_vendored: bool = False,
     keep_contents: bool = False,
     cache_data: Optional[dict] = None,
+    processes: Optional[bool] = None,
 ) -> ScanResult:
     """Walk ``root`` and gather per-file line/language/complexity stats.
 
@@ -244,9 +250,7 @@ def scan(
     else:
         to_parse = todo
 
-    workers = jobs or min(32, (os.cpu_count() or 4) * 4)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        processed = list(pool.map(lambda p: _process_file(p, root_path, max_bytes), to_parse))
+    processed = _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, processes)
 
     for full, item in zip(to_parse, processed):
         if item is None:
@@ -299,8 +303,33 @@ def _absorb(result, stat, todos, scores, vendored, include_vendored, text, keep_
         result.contents[stat.path] = text
 
 
-def _process_file(full: Path, root_path: Path, max_bytes: int):
-    """Read and analyze one file. Returns (FileStat, todos, scores) or None."""
+def _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, processes):
+    """Analyze files in parallel. Uses processes for large, CPU-bound scans so
+    complexity parsing actually spreads across cores (threads can't, due to the
+    GIL); falls back to threads for small scans or when contents must be kept."""
+    if not to_parse:
+        return []
+    worker = functools.partial(
+        _process_file, root_path=root_path, max_bytes=max_bytes, keep_contents=keep_contents,
+    )
+    use_proc = processes if processes is not None else (
+        not keep_contents and len(to_parse) >= _PROCESS_THRESHOLD and (os.cpu_count() or 1) > 1
+    )
+    if use_proc:
+        try:
+            workers = jobs or min(8, os.cpu_count() or 2)
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                return list(pool.map(worker, to_parse, chunksize=16))
+        except Exception:
+            pass  # fall back to threads if the process pool cannot start
+    workers = jobs or min(32, (os.cpu_count() or 4) * 4)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(worker, to_parse))
+
+
+def _process_file(full: Path, root_path: Path, max_bytes: int, keep_contents: bool = False):
+    """Read and analyze one file. Returns (FileStat, todos, scores, text, vendored)
+    or None. Top-level and picklable so it works with a process pool."""
     fn = full.name
     ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
     language = lang_for(ext, fn)
@@ -321,7 +350,8 @@ def _process_file(full: Path, root_path: Path, max_bytes: int):
     if not vendored:
         _collect_todos(text, rel, language, todos)
         _score_complexity(text, rel, language, scores)
-    return stat, todos, scores, text, vendored
+    # Avoid shipping file text back across a process boundary unless needed.
+    return stat, todos, scores, (text if keep_contents else None), vendored
 
 
 def _walk(root_path: Path, ignore: set):

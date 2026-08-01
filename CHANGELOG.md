@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-08-01
+
+### Added
+- **Multicore scanning for large repositories**: complexity parsing now runs in
+  a process pool when a scan is big enough (CPU-bound work the GIL kept threads
+  from parallelizing), roughly halving cold-scan time on large monorepos. Force
+  the mode with `--processes` / `--threads`. Django (415k LOC): ~20.5s → ~10.1s.
+
 ## [0.4.1] - 2026-08-01
 
 ### Added

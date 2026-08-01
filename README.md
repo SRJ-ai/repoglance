@@ -246,18 +246,40 @@ docker run --rm -v "$PWD:/repo" repoglance /repo
 A ready-to-copy GitLab CI job lives in
 [`integrations/gitlab-ci.yml`](integrations/gitlab-ci.yml).
 
+## Built for large monorepos
+
+repoglance is designed to stay useful at the scale of a big-tech monorepo —
+millions of lines, thousands of files — not just small projects:
+
+- **Diff mode** (`--since <rev>`) analyzes only the files a change touches, so a
+  PR check on a giant repo stays fast regardless of total size.
+- **Incremental cache** (`--cache`) reuses unchanged files by mtime + size —
+  repeat runs are near-instant (see below).
+- **True multicore scanning**: for large repos it automatically uses a process
+  pool (complexity parsing is CPU-bound, so threads alone can't use every core),
+  roughly halving cold-scan time. Force it with `--processes` / `--threads`.
+- **`.gitignore`-aware** and **vendored/generated exclusion**, so third-party
+  and generated code doesn't drown the signal.
+- **Path scoping** with `--include` / `--exclude` globs for per-team slices of a
+  shared repo.
+
+> Note: repoglance is an independent open-source project. It is not affiliated
+> with, endorsed by, or used by any company named for scale comparison.
+
 ## Performance
 
 Measured on Django (3,180 files, ~415k lines of code), single machine:
 
 | Run | Time |
 |---|--:|
-| Cold scan (full complexity analysis) | ~16.6 s |
+| Cold scan, threads | ~20.5 s |
+| Cold scan, process pool (auto on large repos) | ~10.1 s |
 | Re-run with `--cache` | ~1.1 s |
 
-The cold scan is dominated by real per-function complexity parsing; the
-incremental cache (`--cache <file>`) reuses unchanged files by mtime + size, so
-repeat runs — the common case in editors and CI — are roughly **15× faster**.
+The cold scan is dominated by real per-function complexity parsing. The process
+pool spreads that across cores (~2× here); the incremental cache (`--cache
+<file>`) reuses unchanged files by mtime + size, so repeat runs — the common
+case in editors and CI — are roughly **20× faster** than a cold thread scan.
 
 ## Design goals
 

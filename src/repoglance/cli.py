@@ -39,7 +39,8 @@ def _resolve(cli_val, cfg, key, default):
 @click.option("--ignore", multiple=True, help="Extra directory name to ignore (repeatable).")
 @click.option("--no-git", is_flag=True, help="Skip git history analysis.")
 @click.option("--max-bytes", type=int, default=None, help="Skip files larger than this many bytes.")
-@click.option("--jobs", type=int, default=None, help="Worker threads for scanning.")
+@click.option("--jobs", type=int, default=None, help="Number of parallel workers for scanning.")
+@click.option("--processes/--threads", "use_processes", default=None, help="Force process- or thread-based parallelism (default: auto by repo size).")
 @click.option("--duplicates", "want_dupes", is_flag=True, help="Detect duplicated code blocks.")
 @click.option("--owners", "want_owners", is_flag=True, help="Attribute top complexity hotspots to authors (git blame).")
 @click.option("--include-vendored", is_flag=True, help="Analyze vendored/generated files instead of excluding them.")
@@ -56,8 +57,9 @@ def _resolve(cli_val, cfg, key, default):
 @click.version_option(__version__, "-V", "--version", prog_name="repoglance")
 def main(path, as_json, as_md, as_csv, as_sarif, sarif_threshold, html_path, svg_path,
          badge_path, badge_json_path, baseline_out, since_rev, include, exclude, ignore,
-         no_git, max_bytes, jobs, want_dupes, want_owners, include_vendored, cache_path,
-         watch, compare_to, fail_on_regression, ci, max_complexity, max_todos, fail_under):
+         no_git, max_bytes, jobs, use_processes, want_dupes, want_owners, include_vendored,
+         cache_path, watch, compare_to, fail_on_regression, ci, max_complexity, max_todos,
+         fail_under):
     """Instant, gorgeous insight into any code repository.
 
     PATH defaults to the current directory. Configuration may be supplied via
@@ -80,6 +82,7 @@ def main(path, as_json, as_md, as_csv, as_sarif, sarif_threshold, html_path, svg
         "max_bytes": max_bytes, "extra_ignores": ignores, "include": include,
         "exclude": exclude, "changed_only": changed, "jobs": jobs,
         "include_vendored": include_vendored, "keep_contents": want_dupes,
+        "processes": use_processes,
     }
 
     if watch:

@@ -7,6 +7,20 @@ from repoglance.cli import main
 from repoglance.config import load_config
 
 
+def test_process_and_thread_modes_agree(tmp_path):
+    from repoglance.scanner import scan
+
+    for i in range(5):
+        (tmp_path / f"m{i}.py").write_text(
+            f"def f{i}(x):\n    if x:\n        return {i}\n    return 0\n", encoding="utf-8"
+        )
+    threaded = scan(tmp_path, processes=False)
+    forked = scan(tmp_path, processes=True)
+    assert [f.path for f in threaded.files] == [f.path for f in forked.files]
+    assert threaded.total_code == forked.total_code
+    assert {s.name for s in threaded.func_scores} == {s.name for s in forked.func_scores}
+
+
 def test_tally_counts_and_orders():
     pairs = gitinfo._tally("alice\nbob\nalice\n\nalice\n")
     assert pairs[0] == ("alice", 3)
