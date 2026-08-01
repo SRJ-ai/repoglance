@@ -14,6 +14,10 @@ token stored anywhere.
    - **Workflow name:** `release.yml`
    - **Environment:** `pypi`
 3. Save.
+4. In the GitHub repo → **Settings → Secrets and variables → Actions →
+   Variables**, add a repository variable `PUBLISH_TO_PYPI` = `true`. This gates
+   the publish job, so version tags can be cut (e.g. to publish the Action to
+   the Marketplace) without a failing PyPI job before the publisher exists.
 
 ## Cutting a release
 

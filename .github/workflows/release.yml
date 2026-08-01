@@ -37,6 +37,10 @@ jobs:
 
   publish:
     needs: build
+    # Enable by setting repo variable PUBLISH_TO_PYPI=true after the PyPI
+    # pending publisher is configured (see RELEASING.md). Until then, tags can
+    # be cut (e.g. for the Marketplace) without a failing publish job.
+    if: ${{ vars.PUBLISH_TO_PYPI == 'true' }}
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
