@@ -152,6 +152,47 @@ def render(console: Console, res: ScanResult, git: Optional[GitStats]) -> None:
         console.print(_git_panel(git))
 
 
+def export(res: ScanResult, git: Optional[GitStats], path: str, fmt: str) -> None:
+    """Render the report into a recording console and write it as HTML or SVG."""
+    import io
+
+    # Record into an off-screen buffer so nothing hits the real terminal and we
+    # avoid Windows legacy-console encoding paths.
+    console = Console(record=True, file=io.StringIO(), width=100)
+    render(console, res, git)
+    if fmt == "svg":
+        data = console.export_svg(title=f"repolens · {res.root.name}")
+    else:
+        data = console.export_html()
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(data)
+
+
+def evaluate_gate(res: ScanResult, max_complexity: Optional[int], max_todos: Optional[int]):
+    """Return (ok, messages) for CI threshold checks. Empty thresholds are skipped."""
+    from .complexity import rank_hotspots
+
+    messages = []
+    ok = True
+    if max_complexity is not None:
+        worst = rank_hotspots(res.files, res.root, top=1)
+        top = worst[0].complexity if worst else 0
+        if top > max_complexity:
+            ok = False
+            offender = f"{worst[0].name} ({worst[0].path}:{worst[0].line})" if worst else "?"
+            messages.append(f"complexity {top} exceeds max {max_complexity} - {offender}")
+        else:
+            messages.append(f"complexity ok (worst {top} <= {max_complexity})")
+    if max_todos is not None:
+        n = len(res.todos)
+        if n > max_todos:
+            ok = False
+            messages.append(f"{n} TODO markers exceed max {max_todos}")
+        else:
+            messages.append(f"todos ok ({n} <= {max_todos})")
+    return ok, messages
+
+
 def to_json(res: ScanResult, git: Optional[GitStats]) -> str:
     agg = res.by_language()
     payload = {

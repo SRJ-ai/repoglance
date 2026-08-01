@@ -8,6 +8,7 @@ import click
 from rich.console import Console
 
 from . import __version__
+from . import badge as badgemod
 from . import gitinfo, report
 from .scanner import scan
 
@@ -15,11 +16,17 @@ from .scanner import scan
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("path", type=click.Path(exists=True, file_okay=False, path_type=Path), default=".")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON instead of the terminal report.")
+@click.option("--html", "html_path", type=click.Path(dir_okay=False, path_type=Path), help="Write the report to a standalone HTML file.")
+@click.option("--svg", "svg_path", type=click.Path(dir_okay=False, path_type=Path), help="Write the report to a standalone SVG file.")
+@click.option("--badge", "badge_path", type=click.Path(dir_okay=False, path_type=Path), help="Write a shields-style SVG badge (loc + top language).")
+@click.option("--ci", is_flag=True, help="CI gate mode: exit nonzero if a threshold is exceeded.")
+@click.option("--max-complexity", type=int, default=None, help="Fail (with --ci) if any function exceeds this complexity.")
+@click.option("--max-todos", type=int, default=None, help="Fail (with --ci) if TODO markers exceed this count.")
 @click.option("--no-git", is_flag=True, help="Skip git history analysis.")
 @click.option("--max-bytes", default=2_000_000, show_default=True, help="Skip files larger than this many bytes.")
 @click.option("--ignore", multiple=True, help="Extra directory name to ignore (repeatable).")
 @click.version_option(__version__, "-V", "--version", prog_name="repolens")
-def main(path: Path, as_json: bool, no_git: bool, max_bytes: int, ignore) -> None:
+def main(path, as_json, html_path, svg_path, badge_path, ci, max_complexity, max_todos, no_git, max_bytes, ignore):
     """Instant, gorgeous insight into any code repository.
 
     PATH defaults to the current directory.
@@ -31,8 +38,31 @@ def main(path: Path, as_json: bool, no_git: bool, max_bytes: int, ignore) -> Non
 
     git_stats = None if no_git else gitinfo.collect(result.root)
 
+    # Side artifacts: write on request, report where they landed.
+    if badge_path:
+        badge_path.write_text(badgemod.badge_for_scan(result), encoding="utf-8")
+        click.echo(f"Wrote badge to {badge_path}", err=True)
+    if html_path:
+        report.export(result, git_stats, str(html_path), "html")
+        click.echo(f"Wrote HTML report to {html_path}", err=True)
+    if svg_path:
+        report.export(result, git_stats, str(svg_path), "svg")
+        click.echo(f"Wrote SVG report to {svg_path}", err=True)
+
+    # CI gate: evaluate thresholds and exit with a clear status.
+    if ci:
+        ok, messages = report.evaluate_gate(result, max_complexity, max_todos)
+        prefix = "OK  " if ok else "FAIL"
+        for m in messages:
+            click.echo(f"[{prefix}] {m}", err=not ok)
+        sys.exit(0 if ok else 2)
+
     if as_json:
         click.echo(report.to_json(result, git_stats))
+        return
+
+    # Only-artifact runs (badge/html/svg without a console report) finish here.
+    if (badge_path or html_path or svg_path) and not sys.stdout.isatty():
         return
 
     # Windows legacy consoles / redirected pipes default to cp1252 and choke on

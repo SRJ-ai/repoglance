@@ -29,22 +29,7 @@ repolens .
 
 <div align="center">
 
-```
-╭─ repolens ───────────────────────────────────────────────╮
-│ 📁 my-project                                            │
-│ 128 files scanned   14,203 lines of code                 │
-│ 342 commits   6 contributors   2023-04-01 → 2026-07-30   │
-╰──────────────────────────────────────────────────────────╯
-╭─ Languages ──────────────────────────────────────────────╮
-│ Python      ████████████████████   71.4%   10,142 loc    │
-│ TypeScript  ██████                  18.9%    2,681 loc    │
-│ CSS         ██                       6.1%      867 loc    │
-╰──────────────────────────────────────────────────────────╯
-╭─ Complexity hotspots ──────╮ ╭─ Biggest files ───────────╮
-│ 27  handle_request  app... │ │ 1,204  src/engine.py      │
-│ 19  parse_config    conf.. │ │   932  src/api/routes.py  │
-╰────────────────────────────╯ ╰───────────────────────────╯
-```
+![repolens demo](assets/demo.svg)
 
 </div>
 
@@ -63,10 +48,14 @@ pipx run repolens .
 ## Usage
 
 ```bash
-repolens                 # analyze current directory
-repolens path/to/repo    # analyze another repo
-repolens --json          # machine-readable output for scripts / CI
-repolens --no-git        # skip git history
+repolens                       # analyze current directory
+repolens path/to/repo          # analyze another repo
+repolens --json                # machine-readable output for scripts / CI
+repolens --svg report.svg      # export a vector report
+repolens --html report.html    # export a browser report
+repolens --badge badge.svg     # export an embeddable badge
+repolens --ci --max-complexity 25   # fail CI on hotspots
+repolens --no-git              # skip git history
 repolens --ignore dist --ignore fixtures
 ```
 
@@ -90,6 +79,57 @@ repolens --json | jq '.languages.Python.code'
 
 Binary files, `node_modules`, `.venv`, build dirs and friends are skipped
 automatically.
+
+## More than a counter
+
+`repolens` isn't just another `cloc`. Tools like `tokei`, `cloc` and `scc`
+answer *"how many lines?"*. repolens answers *"what should I look at?"* — and
+gives you artifacts you can put in a PR or a README.
+
+| | repolens | tokei | scc | cloc |
+|---|:---:|:---:|:---:|:---:|
+| Lines-of-code by language | ✅ | ✅ | ✅ | ✅ |
+| Complexity hotspots (per function) | ✅ | ❌ | ⚠️ file-level | ❌ |
+| TODO / FIXME tracker | ✅ | ❌ | ❌ | ❌ |
+| Git activity (authors, churn) | ✅ | ❌ | ❌ | ❌ |
+| JSON output | ✅ | ✅ | ✅ | ✅ |
+| **HTML / SVG report export** | ✅ | ❌ | ❌ | ❌ |
+| **Embeddable repo badge** | ✅ | ❌ | ❌ | ❌ |
+| **CI gate (`--max-complexity`)** | ✅ | ❌ | ❌ | ❌ |
+| Zero install deps beyond one `pip` | ✅ | (binary) | (binary) | (perl) |
+
+## Share it: badges & reports
+
+Generate a self-contained SVG badge — no shields.io round-trip, no tracking:
+
+```bash
+repolens --badge assets/badge.svg
+```
+
+![repolens badge](assets/badge.svg)
+
+Export the full report as a standalone file to drop in a PR or wiki:
+
+```bash
+repolens --svg report.svg      # vector, pixel-perfect
+repolens --html report.html    # opens in any browser
+```
+
+## Guard your codebase in CI
+
+Fail the build when complexity or TODO debt crosses a line:
+
+```bash
+repolens --ci --max-complexity 25 --max-todos 100
+```
+
+```yaml
+# .github/workflows/quality.yml
+- run: pip install repolens
+- run: repolens --ci --max-complexity 25
+```
+
+Exit code `0` = clean, `2` = a threshold was exceeded.
 
 ## Design goals
 
