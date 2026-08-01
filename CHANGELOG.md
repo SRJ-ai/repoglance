@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-08-01
+
+### Added
+- **`--fast` mode**: counts only (languages, LOC, sizes), skipping per-function
+  complexity parsing — the expensive step. Combined with the process pool this
+  scans **20 million lines in ~4.4 s** (~4.5M LOC/s). Use it for size/inventory
+  passes on very large monorepos; drop it for full complexity/health analysis.
+
+### Changed
+- **Python complexity now uses CPython's C-accelerated `ast`** instead of the
+  pure-Python tokenizer, roughly **halving full-analysis time on Python-heavy
+  repos** (Django 415k LOC: ~10 s → ~5 s on 8 cores). Other languages still use
+  lizard. Adaptive process-pool chunk sizing reduces IPC overhead.
+
 ## [0.4.2] - 2026-08-01
 
 ### Added

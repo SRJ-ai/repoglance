@@ -18,7 +18,7 @@ from typing import Dict, Iterable, List, Optional
 
 from .complexity import FuncScore, analyze_complexity
 from .languages import lang_for
-from .vendored import is_vendored
+from .vendored import is_vendored, is_vendored_path
 
 # Above this many files we default to process-based parallelism: complexity
 # parsing is CPU-bound and the GIL prevents threads from using multiple cores.
@@ -204,6 +204,7 @@ def scan(
     keep_contents: bool = False,
     cache_data: Optional[dict] = None,
     processes: Optional[bool] = None,
+    fast: bool = False,
 ) -> ScanResult:
     """Walk ``root`` and gather per-file line/language/complexity stats.
 
@@ -250,7 +251,7 @@ def scan(
     else:
         to_parse = todo
 
-    processed = _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, processes)
+    processed = _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, processes, fast)
 
     for full, item in zip(to_parse, processed):
         if item is None:
@@ -303,14 +304,15 @@ def _absorb(result, stat, todos, scores, vendored, include_vendored, text, keep_
         result.contents[stat.path] = text
 
 
-def _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, processes):
+def _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, processes, fast=False):
     """Analyze files in parallel. Uses processes for large, CPU-bound scans so
     complexity parsing actually spreads across cores (threads can't, due to the
     GIL); falls back to threads for small scans or when contents must be kept."""
     if not to_parse:
         return []
     worker = functools.partial(
-        _process_file, root_path=root_path, max_bytes=max_bytes, keep_contents=keep_contents,
+        _process_file, root_path=root_path, max_bytes=max_bytes,
+        keep_contents=keep_contents, fast=fast,
     )
     use_proc = processes if processes is not None else (
         not keep_contents and len(to_parse) >= _PROCESS_THRESHOLD and (os.cpu_count() or 1) > 1
@@ -318,8 +320,10 @@ def _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, proce
     if use_proc:
         try:
             workers = jobs or min(8, os.cpu_count() or 2)
+            # Larger chunks amortize per-task IPC/pickling overhead.
+            chunk = max(16, len(to_parse) // (workers * 4))
             with ProcessPoolExecutor(max_workers=workers) as pool:
-                return list(pool.map(worker, to_parse, chunksize=16))
+                return list(pool.map(worker, to_parse, chunksize=chunk))
         except Exception:
             pass  # fall back to threads if the process pool cannot start
     workers = jobs or min(32, (os.cpu_count() or 4) * 4)
@@ -327,9 +331,15 @@ def _parallel_process(to_parse, root_path, max_bytes, keep_contents, jobs, proce
         return list(pool.map(worker, to_parse))
 
 
-def _process_file(full: Path, root_path: Path, max_bytes: int, keep_contents: bool = False):
+def _process_file(full: Path, root_path: Path, max_bytes: int,
+                  keep_contents: bool = False, fast: bool = False):
     """Read and analyze one file. Returns (FileStat, todos, scores, text, vendored)
-    or None. Top-level and picklable so it works with a process pool."""
+    or None. Top-level and picklable so it works with a process pool.
+
+    In ``fast`` mode we only count lines and detect language/vendoring — the
+    per-function complexity parse (the expensive step) is skipped, which is what
+    lets very large repositories be scanned in seconds.
+    """
     fn = full.name
     ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
     language = lang_for(ext, fn)
@@ -344,10 +354,10 @@ def _process_file(full: Path, root_path: Path, max_bytes: int, keep_contents: bo
     rel = full.relative_to(root_path).as_posix()
     total, code, blank, comment = _count_lines(text, language)
     stat = FileStat(rel, language, total, code, blank, comment, size)
-    vendored = is_vendored(rel, text)
+    vendored = is_vendored_path(rel) if fast else is_vendored(rel, text)
     todos: List[Todo] = []
     scores: List[FuncScore] = []
-    if not vendored:
+    if not vendored and not fast:
         _collect_todos(text, rel, language, todos)
         _score_complexity(text, rel, language, scores)
     # Avoid shipping file text back across a process boundary unless needed.

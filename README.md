@@ -270,11 +270,16 @@ millions of lines, thousands of files — not just small projects:
 
 Measured on Django (3,180 files, ~415k lines of code), single machine:
 
-| Run | Time |
-|---|--:|
-| Cold scan, threads | ~20.5 s |
-| Cold scan, process pool (auto on large repos) | ~10.1 s |
-| Re-run with `--cache` | ~1.1 s |
+| Run | Repo | Time |
+|---|---|--:|
+| Cold scan, full analysis (8 cores) | Django, 415k LOC | ~5.0 s |
+| Re-run with `--cache` | Django, 415k LOC | ~1.1 s |
+| **`--fast` (counts only), process pool** | **20,000,000 LOC** | **~4.4 s** |
+
+`--fast` skips per-function complexity parsing (the expensive step) and reports
+languages, line counts and sizes only — that's what makes a 20-million-line
+scan finish in seconds (~4.5M LOC/s here). Drop `--fast` when you want the full
+complexity/health analysis.
 
 The cold scan is dominated by real per-function complexity parsing. The process
 pool spreads that across cores (~2× here); the incremental cache (`--cache

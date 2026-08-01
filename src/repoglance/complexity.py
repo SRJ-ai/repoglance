@@ -70,7 +70,7 @@ def _lizard_scores(source: str, rel_path: str) -> Optional[List[FuncScore]]:
 
 
 def python_complexity(source: str, rel_path: str) -> List[FuncScore]:
-    """AST-based fallback for Python when lizard is unavailable."""
+    """Fast AST-based complexity for Python (CPython's C parser)."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -79,17 +79,24 @@ def python_complexity(source: str, rel_path: str) -> List[FuncScore]:
     scores: List[FuncScore] = []
 
     class Visitor(ast.NodeVisitor):
-        def _score(self, node) -> int:
+        def _measure(self, node):
             complexity = 1
+            nodes = 0
             for child in ast.walk(node):
+                nodes += 1
                 if isinstance(child, _BRANCH_NODES):
                     complexity += 1
                 elif isinstance(child, _BOOLOP_EXTRA):
                     complexity += len(child.values) - 1
-            return complexity
+            end = getattr(node, "end_lineno", node.lineno) or node.lineno
+            nloc = max(1, end - node.lineno + 1)
+            args = node.args
+            params = len(args.args) + len(getattr(args, "posonlyargs", [])) + len(args.kwonlyargs)
+            return complexity, nloc, nodes, params
 
         def visit_FunctionDef(self, node):
-            scores.append(FuncScore(rel_path, node.name, node.lineno, self._score(node)))
+            cx, nloc, tokens, params = self._measure(node)
+            scores.append(FuncScore(rel_path, node.name, node.lineno, cx, nloc, tokens, params))
             self.generic_visit(node)
 
         visit_AsyncFunctionDef = visit_FunctionDef
@@ -104,14 +111,22 @@ def heuristic_complexity(source: str, rel_path: str) -> int:
 
 
 def analyze_complexity(source: str, rel_path: str, language: str) -> List[FuncScore]:
-    """Return per-function complexity, preferring lizard's real analysis."""
+    """Return per-function complexity.
+
+    Python is analyzed with CPython's C-accelerated ``ast`` (much faster than a
+    pure-Python tokenizer), which matters a lot on Python-heavy monorepos. Other
+    languages use lizard; anything lizard cannot read falls back to a heuristic.
+    """
     if language in NON_CODE_LANGS:
         return []
+    if language == "Python":
+        scores = python_complexity(source, rel_path)
+        if scores:
+            return scores
+        # Empty may mean a syntax error (e.g. Python 2); let lizard try.
     scores = _lizard_scores(source, rel_path)
     if scores is not None:
         return scores
-    if language == "Python":
-        return python_complexity(source, rel_path)
     score = heuristic_complexity(source, rel_path)
     return [FuncScore(rel_path, "(file)", 1, score)] if score > 1 else []
 

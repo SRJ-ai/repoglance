@@ -7,6 +7,20 @@ from repoglance.cli import main
 from repoglance.config import load_config
 
 
+def test_fast_mode_counts_without_complexity(tmp_path):
+    from repoglance.scanner import scan
+
+    (tmp_path / "a.py").write_text(
+        "def f(x):\n    if x:\n        return 1  # TODO\n    return 0\n", encoding="utf-8"
+    )
+    fast = scan(tmp_path, fast=True)
+    full = scan(tmp_path, fast=False)
+    assert fast.total_code == full.total_code       # counts still accurate
+    assert fast.func_scores == []                   # complexity skipped
+    assert fast.todos == []                          # todo scan skipped too
+    assert full.func_scores                          # full mode still analyzes
+
+
 def test_process_and_thread_modes_agree(tmp_path):
     from repoglance.scanner import scan
 
