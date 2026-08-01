@@ -181,7 +181,7 @@ The report also lands in the workflow's **job summary** every run.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/SRJ-ai/repolens
-    rev: v0.1.0
+    rev: v0.1.1
     hooks:
       - id: repolens
         args: ["--ci", "--fail-under", "70"]

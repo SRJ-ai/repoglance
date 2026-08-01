@@ -1,4 +1,4 @@
-name: "repolens"
+name: "Repolens Repo Insight"
 description: "Analyze a repository and (optionally) post a repolens report as a PR comment or gate the build."
 branding:
   icon: "search"
