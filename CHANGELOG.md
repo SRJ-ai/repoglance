@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-08-01
+
+### Added
+- `--sarif-threshold` to control the minimum complexity reported in SARIF.
+- Ruff linting and coverage reporting in CI; a reproducible `benchmarks/bench.py`.
+
+### Changed
+- Internal refactors (`gitinfo.collect`) and lint cleanups; no behavior change.
+
 ## [0.4.0] - 2026-08-01
 
 ### Added

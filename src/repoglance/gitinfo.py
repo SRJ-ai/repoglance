@@ -53,6 +53,16 @@ def owners(root: Path, paths: List[str]) -> dict:
     return result
 
 
+def _tally(raw: Optional[str]) -> list:
+    """Count non-empty lines and return (value, count) pairs, most frequent first."""
+    counts: dict = {}
+    for line in (raw or "").splitlines():
+        key = line.strip()
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+
+
 def collect(root: Path) -> Optional[GitStats]:
     """Return git statistics, or ``None`` if ``root`` is not a git repo."""
     if _run(root, ["rev-parse", "--is-inside-work-tree"]) is None:
@@ -63,20 +73,8 @@ def collect(root: Path) -> Optional[GitStats]:
     if total_commits == 0:
         return None
 
-    authors: dict = {}
-    for line in (_run(root, ["log", "--format=%an"]) or "").splitlines():
-        name = line.strip()
-        if name:
-            authors[name] = authors.get(name, 0) + 1
-    contributors = sorted(authors.items(), key=lambda kv: kv[1], reverse=True)
-
-    files: dict = {}
-    for line in (_run(root, ["log", "--name-only", "--format="]) or "").splitlines():
-        p = line.strip()
-        if p:
-            files[p] = files.get(p, 0) + 1
-    hot_files = sorted(files.items(), key=lambda kv: kv[1], reverse=True)
-
+    contributors = _tally(_run(root, ["log", "--format=%an"]))
+    hot_files = _tally(_run(root, ["log", "--name-only", "--format="]))
     days = {
         line.strip()
         for line in (_run(root, ["log", "--format=%cd", "--date=short"]) or "").splitlines()

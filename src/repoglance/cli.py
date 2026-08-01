@@ -8,9 +8,8 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from . import __version__
+from . import __version__, gitinfo, report
 from . import badge as badgemod
-from . import gitinfo, report
 from .config import load_config
 from .scanner import changed_files, scan
 
@@ -26,6 +25,7 @@ def _resolve(cli_val, cfg, key, default):
 @click.option("--md", "--markdown", "as_md", is_flag=True, help="Emit a Markdown report (PR comments / summaries).")
 @click.option("--csv", "as_csv", is_flag=True, help="Emit a per-file CSV.")
 @click.option("--sarif", "as_sarif", is_flag=True, help="Emit SARIF 2.1.0 (GitHub code scanning).")
+@click.option("--sarif-threshold", type=int, default=10, show_default=True, help="Minimum complexity reported in SARIF.")
 # file artifacts
 @click.option("--html", "html_path", type=click.Path(dir_okay=False, path_type=Path), help="Write a standalone HTML report.")
 @click.option("--svg", "svg_path", type=click.Path(dir_okay=False, path_type=Path), help="Write a standalone SVG report.")
@@ -54,10 +54,10 @@ def _resolve(cli_val, cfg, key, default):
 @click.option("--max-todos", type=int, default=None, help="Fail (with --ci) if TODO markers exceed this count.")
 @click.option("--fail-under", type=int, default=None, help="Fail (with --ci) if the health score is below this (0-100).")
 @click.version_option(__version__, "-V", "--version", prog_name="repoglance")
-def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path,
-         badge_json_path, baseline_out, since_rev, include, exclude, ignore, no_git,
-         max_bytes, jobs, want_dupes, want_owners, include_vendored, cache_path, watch,
-         compare_to, fail_on_regression, ci, max_complexity, max_todos, fail_under):
+def main(path, as_json, as_md, as_csv, as_sarif, sarif_threshold, html_path, svg_path,
+         badge_path, badge_json_path, baseline_out, since_rev, include, exclude, ignore,
+         no_git, max_bytes, jobs, want_dupes, want_owners, include_vendored, cache_path,
+         watch, compare_to, fail_on_regression, ci, max_complexity, max_todos, fail_under):
     """Instant, gorgeous insight into any code repository.
 
     PATH defaults to the current directory. Configuration may be supplied via
@@ -76,11 +76,11 @@ def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path
         click.echo(f"No changed files since {since_rev} (or not a git repo).", err=True)
         return
 
-    scan_kwargs = dict(
-        max_bytes=max_bytes, extra_ignores=ignores, include=include, exclude=exclude,
-        changed_only=changed, jobs=jobs, include_vendored=include_vendored,
-        keep_contents=want_dupes,
-    )
+    scan_kwargs = {
+        "max_bytes": max_bytes, "extra_ignores": ignores, "include": include,
+        "exclude": exclude, "changed_only": changed, "jobs": jobs,
+        "include_vendored": include_vendored, "keep_contents": want_dupes,
+    }
 
     if watch:
         _run_watch(root, scan_kwargs, no_git)
@@ -105,7 +105,7 @@ def main(path, as_json, as_md, as_csv, as_sarif, html_path, svg_path, badge_path
                  max_complexity, max_todos, fail_under):
         sys.exit(2)
 
-    if _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif):
+    if _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif, sarif_threshold):
         return
 
     # If only artifacts/gates were requested (non-interactive), stop here.
@@ -205,7 +205,7 @@ def _evaluate(result, git_stats, compare_to, fail_on_regression, ci, cfg,
     return failed
 
 
-def _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif) -> bool:
+def _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif, sarif_threshold) -> bool:
     """Emit a requested stdout format. Returns True if one was emitted."""
     if as_json:
         click.echo(report.to_json(result, git_stats))
@@ -214,7 +214,7 @@ def _emit_format(result, git_stats, as_json, as_md, as_csv, as_sarif) -> bool:
     elif as_csv:
         click.echo(report.to_csv(result), nl=False)
     elif as_sarif:
-        click.echo(report.to_sarif(result))
+        click.echo(report.to_sarif(result, min_complexity=sarif_threshold))
     else:
         return False
     return True

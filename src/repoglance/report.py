@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Optional
 
 from rich.columns import Columns
@@ -211,7 +210,7 @@ def _duplicates_panel(res: ScanResult) -> Panel:
         body = Text("No significant duplication found.", style="dim")
     else:
         for b in dd.blocks[:6]:
-            locs = ", ".join(f"{p}:{l}" for p, l in b.occurrences[:3])
+            locs = ", ".join(f"{p}:{ln}" for p, ln in b.occurrences[:3])
             more = f" +{len(b.occurrences) - 3}" if len(b.occurrences) > 3 else ""
             table.add_row(Text(f"x{len(b.occurrences)}", style="bold red"),
                           Text(f"{locs}{more}", style="dim"))
@@ -379,7 +378,7 @@ def build_payload(res: ScanResult, git: Optional[GitStats]) -> dict:
             "ratio": round(dd.ratio, 4),
             "duplicated_lines": dd.duplicated_lines,
             "blocks": [
-                {"lines": b.lines, "occurrences": [{"path": p, "line": l} for p, l in b.occurrences]}
+                {"lines": b.lines, "occurrences": [{"path": p, "line": ln} for p, ln in b.occurrences]}
                 for b in dd.blocks
             ],
         }

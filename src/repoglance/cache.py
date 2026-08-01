@@ -54,6 +54,6 @@ def rebuild(rel: str, entry: dict):
     """Reconstruct (FileStat, todos, scores, vendored) from a cache entry."""
     lang, lines, code, blank, comment = entry["stat"]
     stat = FileStat(rel, lang, lines, code, blank, comment, entry["size"])
-    todos = [Todo(rel, l, m, t) for l, m, t in entry["todos"]]
+    todos = [Todo(rel, ln, m, t) for ln, m, t in entry["todos"]]
     scores = [FuncScore(rel, n, ln, cx, nloc, tok, pr) for n, ln, cx, nloc, tok, pr in entry["scores"]]
     return stat, todos, scores, entry.get("vendored", False)

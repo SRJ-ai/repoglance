@@ -184,9 +184,7 @@ def _glob_ok(rel: str, include, exclude) -> bool:
     """Apply include/exclude glob patterns (fnmatch) to a repo-relative path."""
     if exclude and any(fnmatch.fnmatch(rel, p) for p in exclude):
         return False
-    if include and not any(fnmatch.fnmatch(rel, p) for p in include):
-        return False
-    return True
+    return not (include and not any(fnmatch.fnmatch(rel, p) for p in include))
 
 
 def scan(
