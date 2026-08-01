@@ -1,4 +1,4 @@
-name: "Repoglance"
+name: "Repoglance Repo Insight"
 description: "Analyze a repository and (optionally) post a repoglance report as a PR comment or gate the build."
 branding:
   icon: "search"
