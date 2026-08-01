@@ -8,11 +8,11 @@ Point it at any folder. In under a second you get a beautiful terminal report:
 language breakdown, complexity hotspots, TODO tracker, biggest files, and git
 activity. **Zero config. Zero API keys. Zero telemetry.**
 
-[![CI](https://github.com/SRJ-ai/repolens/actions/workflows/ci.yml/badge.svg)](https://github.com/SRJ-ai/repolens/actions/workflows/ci.yml)
+[![CI](https://github.com/SRJ-ai/repoglance/actions/workflows/ci.yml/badge.svg)](https://github.com/SRJ-ai/repoglance/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)](https://github.com/SRJ-ai/repolens)
+[![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repoglance/main/.repoglance-badge.json)](https://github.com/SRJ-ai/repoglance)
 
 </div>
 
@@ -40,9 +40,9 @@ repoglance run against well-known projects (click to view the full report):
 
 | Project | Files | Lines of code | Health |
 |---|--:|--:|:--:|
-| [flask](assets/showcase/flask.svg) | 200 | 25,030 | D (64) |
-| [httpie](assets/showcase/httpie.svg) | 217 | 19,604 | D (62) |
-| [requests](assets/showcase/requests.svg) | 71 | 13,215 | D (69) |
+| [flask](assets/showcase/flask.svg) | 209 | 25,293 | D (64) |
+| [httpie](assets/showcase/httpie.svg) | 236 | 20,114 | D (62) |
+| [requests](assets/showcase/requests.svg) | 89 | 13,785 | C (70) |
 
 <div align="center">
 
@@ -167,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: SRJ-ai/repolens@main
+      - uses: SRJ-ai/repoglance@main
         with:
           fail-under: "70"       # optional health gate
           max-complexity: "25"   # optional complexity gate
@@ -180,8 +180,8 @@ The report also lands in the workflow's **job summary** every run.
 ```yaml
 # .pre-commit-config.yaml
 repos:
-  - repo: https://github.com/SRJ-ai/repolens
-    rev: v0.2.0
+  - repo: https://github.com/SRJ-ai/repoglance
+    rev: v0.2.2
     hooks:
       - id: repoglance
         args: ["--ci", "--fail-under", "70"]
@@ -193,11 +193,11 @@ Commit a shields endpoint file and point a dynamic badge at it — the badge
 refreshes itself, no service to run:
 
 ```bash
-repoglance --badge-json .repolens-badge.json   # commit this file
+repoglance --badge-json .repoglance-badge.json   # commit this file
 ```
 
 ```markdown
-![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)
+![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repoglance/main/.repoglance-badge.json)
 ```
 
 ### Markdown anywhere
@@ -208,7 +208,7 @@ repoglance --md   # paste into a PR, wiki, or Slack
 
 ## Design goals
 
-- **Fast** — a single `os.walk`, no external services.
+- **Fast** — a single pass, no external services.
 - **Honest** — no network, no telemetry, no surprise writes.
 - **Pretty** — powered by [rich](https://github.com/Textualize/rich).
 - **Scriptable** — everything the report shows is available as `--json`.

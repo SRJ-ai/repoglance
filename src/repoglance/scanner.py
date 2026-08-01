@@ -1,14 +1,22 @@
-"""Repository walker: collects per-file stats while honoring ignore rules."""
+"""Repository walker: collects per-file stats while honoring ignore rules.
+
+When the target is a git repository, the file list comes from ``git ls-files``
+so the user's ``.gitignore`` is respected for free. Otherwise we fall back to a
+pruned ``os.walk``. Complexity is computed inline from the text we already read,
+so every file is read exactly once.
+"""
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .complexity import FuncScore, heuristic_complexity, python_complexity, NON_CODE_LANGS
 from .languages import lang_for
 
-# Directories never worth scanning.
+# Directories never worth scanning (used only on the non-git fallback path).
 IGNORE_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "venv", ".venv", "env",
     "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox",
@@ -54,7 +62,9 @@ class ScanResult:
     root: Path
     files: List[FileStat] = field(default_factory=list)
     todos: List[Todo] = field(default_factory=list)
+    func_scores: List[FuncScore] = field(default_factory=list)
     skipped_binary: int = 0
+    used_gitignore: bool = False
 
     @property
     def total_lines(self) -> int:
@@ -75,75 +85,24 @@ class ScanResult:
         return agg
 
 
-# Comment prefixes by language (single-line only; good enough for stats).
+# Line-comment prefixes by language (for blank/comment/code classification).
 _COMMENT_PREFIX = {
     "Python": ("#",), "Ruby": ("#",), "Shell": ("#",), "YAML": ("#",),
     "PowerShell": ("#",), "R": ("#",), "Makefile": ("#",), "TOML": ("#",),
-    "JavaScript": ("//", "/*", "*"), "TypeScript": ("//", "/*", "*"),
-    "Go": ("//", "/*", "*"), "Rust": ("//", "/*", "*"), "Java": ("//", "/*", "*"),
-    "C": ("//", "/*", "*"), "C++": ("//", "/*", "*"), "C#": ("//", "/*", "*"),
-    "PHP": ("//", "#", "/*", "*"), "Swift": ("//", "/*", "*"),
-    "CSS": ("/*", "*"), "SCSS": ("//", "/*", "*"),
+    "JavaScript": ("//",), "TypeScript": ("//",),
+    "Go": ("//",), "Rust": ("//",), "Java": ("//",),
+    "C": ("//",), "C++": ("//",), "C#": ("//",),
+    "PHP": ("//", "#"), "Swift": ("//",),
+    "SCSS": ("//",),
 }
 
+# Languages that use C-style /* ... */ block comments.
+_BLOCK_COMMENT_LANGS = {
+    "JavaScript", "TypeScript", "Go", "Rust", "Java", "C", "C++", "C#",
+    "PHP", "Swift", "CSS", "SCSS", "Kotlin", "Scala", "Dart",
+}
 
-def _count_lines(text: str, language: str):
-    prefixes = _COMMENT_PREFIX.get(language, ())
-    total = blank = comment = 0
-    for raw in text.splitlines():
-        total += 1
-        stripped = raw.strip()
-        if not stripped:
-            blank += 1
-        elif prefixes and stripped.startswith(prefixes):
-            comment += 1
-    code = total - blank - comment
-    return total, code, blank, comment
-
-
-def scan(
-    root: os.PathLike,
-    max_bytes: int = 2_000_000,
-    extra_ignores: Optional[set] = None,
-) -> ScanResult:
-    """Walk ``root`` and gather per-file line/language stats plus TODO markers."""
-    root_path = Path(root).resolve()
-    result = ScanResult(root=root_path)
-    ignore = IGNORE_DIRS | (extra_ignores or set())
-
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        # Prune ignored dirs in place so os.walk skips descending them.
-        dirnames[:] = [d for d in dirnames if d not in ignore and not d.startswith(".git")]
-        for fn in filenames:
-            ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
-            if ext.lower() in BINARY_EXT:
-                result.skipped_binary += 1
-                continue
-            language = lang_for(ext, fn)
-            if not language:
-                continue
-            full = Path(dirpath) / fn
-            try:
-                size = full.stat().st_size
-                if size > max_bytes:
-                    continue
-                text = full.read_text(encoding="utf-8", errors="ignore")
-            except (OSError, ValueError):
-                continue
-
-            rel = full.relative_to(root_path).as_posix()
-            total, code, blank, comment = _count_lines(text, language)
-            result.files.append(
-                FileStat(rel, language, total, code, blank, comment, size)
-            )
-            _collect_todos(text, rel, language, result.todos)
-
-    return result
-
-
-# Line-comment tokens per language, used to confine TODO scanning to comments so
-# marker *words* in prose or code (e.g. "TODO tracker", a marker list) aren't
-# counted as debt.
+# Line-comment tokens used to confine TODO scanning to comments.
 _LINE_COMMENT = {
     "Python": ("#",), "Ruby": ("#",), "Shell": ("#",), "YAML": ("#",),
     "PowerShell": ("#",), "R": ("#",), "TOML": ("#",), "Makefile": ("#",),
@@ -154,6 +113,119 @@ _LINE_COMMENT = {
 }
 
 
+def _count_lines(text: str, language: str):
+    """Classify lines into total/code/blank/comment, handling /* */ blocks."""
+    prefixes = _COMMENT_PREFIX.get(language, ())
+    has_block = language in _BLOCK_COMMENT_LANGS
+    total = blank = comment = 0
+    in_block = False
+    for raw in text.splitlines():
+        total += 1
+        stripped = raw.strip()
+        if not stripped:
+            blank += 1
+            continue
+        if in_block:
+            comment += 1
+            if "*/" in stripped:
+                in_block = False
+            continue
+        if has_block and stripped.startswith("/*"):
+            comment += 1
+            if "*/" not in stripped[2:]:
+                in_block = True
+            continue
+        if prefixes and stripped.startswith(prefixes):
+            comment += 1
+            continue
+    code = total - blank - comment
+    return total, code, blank, comment
+
+
+def _git_tracked(root: Path) -> Optional[List[str]]:
+    """Return repo-relative paths git considers part of the tree (honoring
+    .gitignore), or ``None`` when ``root`` is not a git repository."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "--cached", "--others",
+             "--exclude-standard"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    return [line for line in out.stdout.splitlines() if line]
+
+
+def scan(
+    root: os.PathLike,
+    max_bytes: int = 2_000_000,
+    extra_ignores: Optional[set] = None,
+) -> ScanResult:
+    """Walk ``root`` and gather per-file line/language/complexity stats."""
+    root_path = Path(root).resolve()
+    result = ScanResult(root=root_path)
+    ignore = IGNORE_DIRS | (extra_ignores or set())
+
+    tracked = _git_tracked(root_path)
+    if tracked is not None:
+        result.used_gitignore = True
+        paths = []
+        for rel in tracked:
+            # Still honor explicit extra ignores on the git path.
+            if extra_ignores and any(part in extra_ignores for part in rel.split("/")):
+                continue
+            paths.append(root_path / rel)
+    else:
+        paths = _walk(root_path, ignore)
+
+    for full in paths:
+        fn = full.name
+        ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
+        if ext.lower() in BINARY_EXT:
+            result.skipped_binary += 1
+            continue
+        language = lang_for(ext, fn)
+        if not language:
+            continue
+        try:
+            size = full.stat().st_size
+            if size > max_bytes:
+                continue
+            text = full.read_text(encoding="utf-8", errors="ignore")
+        except (OSError, ValueError):
+            continue
+
+        rel = full.relative_to(root_path).as_posix()
+        total, code, blank, comment = _count_lines(text, language)
+        result.files.append(FileStat(rel, language, total, code, blank, comment, size))
+        _collect_todos(text, rel, language, result.todos)
+        _score_complexity(text, rel, language, result.func_scores)
+
+    return result
+
+
+def _walk(root_path: Path, ignore: set):
+    """Return file paths under ``root_path``, pruning ignored directories."""
+    out = []
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        dirnames[:] = [d for d in dirnames if d not in ignore and not d.startswith(".git")]
+        for fn in filenames:
+            out.append(Path(dirpath) / fn)
+    return out
+
+
+def _score_complexity(text: str, rel: str, language: str, out: List[FuncScore]) -> None:
+    """Compute complexity from already-read text (no second file read)."""
+    if language == "Python":
+        out.extend(python_complexity(text, rel))
+    elif language not in NON_CODE_LANGS:
+        score = heuristic_complexity(text, rel)
+        if score > 1:
+            out.append(FuncScore(rel, "(file)", 1, score))
+
+
 def _collect_todos(text: str, rel: str, language: str, out: List[Todo]) -> None:
     prefixes = _LINE_COMMENT.get(language)
     if not prefixes:
@@ -161,7 +233,6 @@ def _collect_todos(text: str, rel: str, language: str, out: List[Todo]) -> None:
         # false positives from documentation that merely mentions the markers.
         return
     for i, line in enumerate(text.splitlines(), start=1):
-        # Only consider the portion of the line inside a line comment.
         starts = [line.find(p) for p in prefixes if line.find(p) != -1]
         if not starts:
             continue
@@ -171,7 +242,6 @@ def _collect_todos(text: str, rel: str, language: str, out: List[Todo]) -> None:
             idx = upper.find(marker)
             if idx == -1:
                 continue
-            # Require non-alphanumeric boundaries so "DEBUG" != "BUG" etc.
             before = upper[idx - 1] if idx > 0 else " "
             after_idx = idx + len(marker)
             after = upper[after_idx] if after_idx < len(upper) else " "

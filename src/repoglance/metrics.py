@@ -43,7 +43,7 @@ def compute(res: ScanResult) -> Health:
     factors.append(("Documentation", doc_pts, 25, f"{ratio * 100:.1f}% comment ratio"))
 
     # 2. Complexity: penalize the worst hotspot (25 pts).
-    worst = rank_hotspots(res.files, res.root, top=1)
+    worst = rank_hotspots(res, top=1)
     top_cx = worst[0].complexity if worst else 0
     # 10 or below = full; 40+ = zero. Linear in between.
     cx_pts = max(0, min(25, round((40 - top_cx) / 30 * 25)))

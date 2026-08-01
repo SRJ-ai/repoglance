@@ -5,7 +5,7 @@ via GitHub Actions using PyPI's **trusted publisher** (OIDC) — there is no API
 token stored anywhere.
 
 > The PyPI distribution is **`repoglance`**; the GitHub repository is
-> **`SRJ-ai/repolens`**. Keep that distinction in mind below.
+> **`SRJ-ai/repoglance`**. Keep that distinction in mind below.
 
 ## One-time PyPI setup
 
@@ -13,7 +13,7 @@ token stored anywhere.
 2. Fill in:
    - **PyPI project name:** `repoglance`
    - **Owner:** `SRJ-ai`
-   - **Repository:** `repolens`
+   - **Repository:** `repoglance`
    - **Workflow name:** `release.yml`
    - **Environment:** `pypi`
 3. Save.

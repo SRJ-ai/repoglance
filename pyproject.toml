@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "repoglance"
-version = "0.2.1"
+version = "0.2.2"
 description = "Instant, gorgeous insight into any code repository — languages, complexity hotspots, TODOs and git activity in one terminal command."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,9 +29,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/SRJ-ai/repolens"
-Repository = "https://github.com/SRJ-ai/repolens"
-Issues = "https://github.com/SRJ-ai/repolens/issues"
+Homepage = "https://github.com/SRJ-ai/repoglance"
+Repository = "https://github.com/SRJ-ai/repoglance"
+Issues = "https://github.com/SRJ-ai/repoglance/issues"
 
 [project.scripts]
 repoglance = "repoglance.cli:main"

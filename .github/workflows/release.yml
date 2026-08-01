@@ -5,7 +5,7 @@ name: Release
 #
 # One-time setup on PyPI: create the project's "pending publisher" at
 # https://pypi.org/manage/account/publishing/ with
-#   owner: SRJ-ai   repo: repolens   workflow: release.yml   environment: pypi
+#   owner: SRJ-ai   repo: repoglance   workflow: release.yml   environment: pypi
 
 on:
   push:

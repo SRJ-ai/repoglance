@@ -8,7 +8,6 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List
 
 # AST nodes that each add a decision point (McCabe-style).
@@ -25,7 +24,7 @@ _BRANCH_RE = re.compile(
 )
 
 # Markup / data / prose languages have no control flow — never treat as hotspots.
-_NON_CODE_LANGS = {
+NON_CODE_LANGS = {
     "Markdown", "reStructuredText", "TeX", "JSON", "YAML", "TOML", "XML",
     "HTML", "CSS", "SCSS", "Sass", "Less", "SQL", "GraphQL", "Protobuf",
 }
@@ -77,20 +76,10 @@ def heuristic_complexity(source: str, rel_path: str) -> int:
     return 1 + len(_BRANCH_RE.findall(source))
 
 
-def rank_hotspots(files, root: Path, top: int = 10) -> List[FuncScore]:
-    """Compute complexity across scanned files and return the worst offenders."""
-    all_scores: List[FuncScore] = []
-    for f in files:
-        full = root / f.path
-        try:
-            src = full.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        if f.language == "Python":
-            all_scores.extend(python_complexity(src, f.path))
-        elif f.language not in _NON_CODE_LANGS:
-            score = heuristic_complexity(src, f.path)
-            if score > 1:
-                all_scores.append(FuncScore(f.path, "(file)", 1, score))
-    all_scores.sort(key=lambda s: s.complexity, reverse=True)
-    return all_scores[:top]
+def rank_hotspots(result, top: int = 10) -> List[FuncScore]:
+    """Return the worst complexity offenders from a completed scan.
+
+    Scores were computed inline during the scan (single file read), so this is
+    just a sort — no filesystem access.
+    """
+    return sorted(result.func_scores, key=lambda s: s.complexity, reverse=True)[:top]
