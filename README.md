@@ -12,6 +12,7 @@ activity. **Zero config. Zero API keys. Zero telemetry.**
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![repolens](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)](https://github.com/SRJ-ai/repolens)
 
 </div>
 
@@ -30,6 +31,22 @@ repolens .
 <div align="center">
 
 ![repolens demo](assets/demo.svg)
+
+</div>
+
+## Seen in the wild
+
+repolens run against well-known projects (click to view the full report):
+
+| Project | Files | Lines of code | Health |
+|---|--:|--:|:--:|
+| [flask](assets/showcase/flask.svg) | 200 | 25,030 | D (63) |
+| [httpie](assets/showcase/httpie.svg) | 217 | 19,604 | D (60) |
+| [requests](assets/showcase/requests.svg) | 71 | 13,215 | D (65) |
+
+<div align="center">
+
+[![flask report](assets/showcase/flask.svg)](assets/showcase/flask.svg)
 
 </div>
 
@@ -130,6 +147,64 @@ repolens --ci --max-complexity 25 --max-todos 100
 ```
 
 Exit code `0` = clean, `2` = a threshold was exceeded.
+
+## Integrations
+
+### GitHub Action — comment on every PR
+
+Drop repolens into any repo. It posts a sticky report comment on pull requests
+and can gate the build:
+
+```yaml
+# .github/workflows/repolens.yml
+name: repolens
+on: [pull_request]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SRJ-ai/repolens@main
+        with:
+          fail-under: "70"       # optional health gate
+          max-complexity: "25"   # optional complexity gate
+```
+
+The report also lands in the workflow's **job summary** every run.
+
+### pre-commit hook
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/SRJ-ai/repolens
+    rev: v0.1.0
+    hooks:
+      - id: repolens
+        args: ["--ci", "--fail-under", "70"]
+```
+
+### Self-updating badge
+
+Commit a shields endpoint file and point a dynamic badge at it — the badge
+refreshes itself, no service to run:
+
+```bash
+repolens --badge-json .repolens-badge.json   # commit this file
+```
+
+```markdown
+![repolens](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)
+```
+
+### Markdown anywhere
+
+```bash
+repolens --md   # paste into a PR, wiki, or Slack
+```
 
 ## Design goals
 

@@ -77,3 +77,18 @@ def badge_for_scan(res: ScanResult) -> str:
     top_lang = max(agg.items(), key=lambda kv: kv[1]["code"])[0] if agg else "code"
     message = f"{_human_loc(res.total_code)} loc • {top_lang}"
     return render_badge("repolens", message, color_for(top_lang))
+
+
+def endpoint_json(res: ScanResult) -> str:
+    """Shields.io endpoint schema — commit it, then point a dynamic badge at the
+    raw URL: https://img.shields.io/endpoint?url=<raw-url>. No hosting needed."""
+    import json
+
+    agg = res.by_language()
+    top_lang = max(agg.items(), key=lambda kv: kv[1]["code"])[0] if agg else "code"
+    return json.dumps({
+        "schemaVersion": 1,
+        "label": "repolens",
+        "message": f"{_human_loc(res.total_code)} loc • {top_lang}",
+        "color": "blue",
+    })

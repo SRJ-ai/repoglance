@@ -1,0 +1,8 @@
+- id: repolens
+  name: repolens health gate
+  description: "Analyze the repo and fail if the health score drops below a threshold."
+  entry: repolens
+  args: ["--ci", "--fail-under", "70"]
+  language: python
+  pass_filenames: false
+  always_run: true

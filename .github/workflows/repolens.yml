@@ -1,0 +1,25 @@
+name: repolens
+
+# Dogfoods the action: on every PR, post a repolens report and enforce a
+# minimum health score.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./
+        with:
+          fail-under: "55"
+          max-complexity: "30"

@@ -62,3 +62,40 @@ def test_gate_counts_todos(tmp_path):
     ok, messages = report.evaluate_gate(res, max_complexity=None, max_todos=0)
     assert ok is False
     assert any("TODO" in m for m in messages)
+
+
+def test_markdown_report(tmp_path):
+    res = _repo(tmp_path)
+    md = report.to_markdown(res, None)
+    assert md.startswith("### ")
+    assert "repolens report" in md
+    assert "| Language |" in md
+    assert "health" in md
+
+
+def test_endpoint_json_is_shields_schema(tmp_path):
+    import json
+
+    res = _repo(tmp_path)
+    data = json.loads(badge.endpoint_json(res))
+    assert data["schemaVersion"] == 1
+    assert data["label"] == "repolens"
+    assert "loc" in data["message"]
+
+
+def test_health_score_bounds_and_grade(tmp_path):
+    from repolens import metrics
+
+    res = _repo(tmp_path)
+    h = metrics.compute(res)
+    assert 0 <= h.score <= 100
+    assert h.grade in {"A", "B", "C", "D", "F"}
+    # Four factors, each capped at 25 -> 100 total possible.
+    assert sum(m for _, _, m, _ in h.factors) == 100
+
+
+def test_health_gate(tmp_path):
+    res = _repo(tmp_path)
+    ok, messages = report.evaluate_gate(res, None, None, fail_under=101)
+    assert ok is False
+    assert any("health" in m for m in messages)

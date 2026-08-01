@@ -1,0 +1,73 @@
+name: "repolens"
+description: "Analyze a repository and (optionally) post a repolens report as a PR comment or gate the build."
+branding:
+  icon: "search"
+  color: "blue"
+
+inputs:
+  path:
+    description: "Directory to analyze."
+    required: false
+    default: "."
+  comment:
+    description: "Post the Markdown report as a sticky PR comment (requires pull_request event and a token with pull-requests: write)."
+    required: false
+    default: "true"
+  fail-under:
+    description: "Fail the job if the health score is below this value (0-100). Empty to disable."
+    required: false
+    default: ""
+  max-complexity:
+    description: "Fail the job if any function exceeds this cyclomatic complexity. Empty to disable."
+    required: false
+    default: ""
+  github-token:
+    description: "Token used to post the PR comment."
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install repolens
+      shell: bash
+      run: python -m pip install --quiet "${{ github.action_path }}"
+
+    - name: Job summary + Markdown report
+      shell: bash
+      run: |
+        repolens "${{ inputs.path }}" --md > "$RUNNER_TEMP/repolens.md"
+        cat "$RUNNER_TEMP/repolens.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Comment on PR
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        # Sticky comment: edit the existing repolens comment if present, else create.
+        marker="<!-- repolens -->"
+        body="$marker"$'\n'"$(cat "$RUNNER_TEMP/repolens.md")"
+        pr="${{ github.event.pull_request.number }}"
+        existing=$(gh api "repos/${{ github.repository }}/issues/$pr/comments" \
+          --jq "[.[] | select(.body | startswith(\"$marker\"))][0].id" 2>/dev/null || echo "")
+        if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+          gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$existing" -f body="$body" >/dev/null
+        else
+          gh api -X POST "repos/${{ github.repository }}/issues/$pr/comments" -f body="$body" >/dev/null
+        fi
+
+    - name: Gate
+      shell: bash
+      run: |
+        args=""
+        [ -n "${{ inputs.fail-under }}" ] && args="$args --fail-under ${{ inputs.fail-under }}"
+        [ -n "${{ inputs.max-complexity }}" ] && args="$args --max-complexity ${{ inputs.max-complexity }}"
+        if [ -n "$args" ]; then
+          repolens "${{ inputs.path }}" --ci $args
+        fi
