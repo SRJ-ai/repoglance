@@ -23,7 +23,8 @@ Optionally give it a color in `LANG_COLOR` and a comment prefix in
 
 ## Guidelines
 
-- Keep the runtime dependencies to `rich` + `click`. Anything heavier needs a
+- Keep the runtime dependencies lean (`rich`, `click`, `lizard`, and `tomli` on
+  Python < 3.11). Anything heavier needs a
   strong justification.
 - Every behavior the report shows must also be reachable via `--json`.
 - Add or update a test in `tests/` for any logic change.

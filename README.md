@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: SRJ-ai/repoglance@main
+      - uses: SRJ-ai/repoglance@v0.4.0
         with:
           fail-under: "70"       # optional health gate
           max-complexity: "25"   # optional complexity gate
@@ -200,7 +200,7 @@ The report also lands in the workflow's **job summary** every run.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/SRJ-ai/repoglance
-    rev: v0.2.2
+    rev: v0.4.0
     hooks:
       - id: repoglance
         args: ["--ci", "--fail-under", "70"]
@@ -245,6 +245,19 @@ docker run --rm -v "$PWD:/repo" repoglance /repo
 
 A ready-to-copy GitLab CI job lives in
 [`integrations/gitlab-ci.yml`](integrations/gitlab-ci.yml).
+
+## Performance
+
+Measured on Django (3,180 files, ~415k lines of code), single machine:
+
+| Run | Time |
+|---|--:|
+| Cold scan (full complexity analysis) | ~16.6 s |
+| Re-run with `--cache` | ~1.1 s |
+
+The cold scan is dominated by real per-function complexity parsing; the
+incremental cache (`--cache <file>`) reuses unchanged files by mtime + size, so
+repeat runs — the common case in editors and CI — are roughly **15× faster**.
 
 ## Design goals
 
