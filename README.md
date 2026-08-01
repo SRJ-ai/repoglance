@@ -8,10 +8,11 @@ Point it at any folder. In under a second you get a beautiful terminal report:
 language breakdown, complexity hotspots, TODO tracker, biggest files, and git
 activity. **Zero config. Zero API keys. Zero telemetry.**
 
+[![PyPI](https://img.shields.io/pypi/v/repoglance.svg)](https://pypi.org/project/repoglance/)
+[![Downloads](https://img.shields.io/pypi/dm/repoglance.svg)](https://pypi.org/project/repoglance/)
 [![CI](https://github.com/SRJ-ai/repoglance/actions/workflows/ci.yml/badge.svg)](https://github.com/SRJ-ai/repoglance/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/pypi/pyversions/repoglance.svg)](https://pypi.org/project/repoglance/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repoglance/main/.repoglance-badge.json)](https://github.com/SRJ-ai/repoglance)
 
 </div>
