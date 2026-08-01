@@ -77,6 +77,8 @@ class ScanResult:
     contents: Dict[str, str] = field(default_factory=dict)  # rel -> text, for dedup
     cache_entries: Dict[str, dict] = field(default_factory=dict)  # updated cache
     ownership: Dict[str, dict] = field(default_factory=dict)  # rel -> {author, lines}
+    imports: Optional[dict] = None       # python import graph (opt-in)
+    coverage_rows: Optional[list] = None  # coverage x complexity (opt-in)
 
     @property
     def total_lines(self) -> int:

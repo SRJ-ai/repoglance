@@ -29,6 +29,14 @@ inputs:
     description: "Only analyze files changed since this git ref (e.g. origin/main). Empty = whole repo."
     required: false
     default: ""
+  annotations:
+    description: "Create a Check Run with inline complexity annotations on the PR (requires checks: write)."
+    required: false
+    default: "false"
+  annotation-threshold:
+    description: "Minimum complexity to annotate inline."
+    required: false
+    default: "15"
   github-token:
     description: "Token used to post the PR comment."
     required: false
@@ -82,6 +90,47 @@ runs:
         else
           gh api -X POST "repos/${{ github.repository }}/issues/$pr/comments" -f body="$body" >/dev/null
         fi
+
+    - name: Inline annotations (Check Run)
+      if: ${{ inputs.annotations == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        repoglance "${{ inputs.path }}" --json > "$RUNNER_TEMP/repoglance.json"
+        python - "$RUNNER_TEMP/repoglance.json" "${{ inputs.annotation-threshold }}" <<'PY' > "$RUNNER_TEMP/checkrun.json"
+        import json, sys
+        report = json.load(open(sys.argv[1]))
+        threshold = int(sys.argv[2])
+        anns = []
+        for h in report.get("hotspots", []):
+            if h["complexity"] < threshold:
+                continue
+            anns.append({
+                "path": h["path"],
+                "start_line": max(1, h["line"]),
+                "end_line": max(1, h["line"]),
+                "annotation_level": "failure" if h["complexity"] >= 25 else "warning",
+                "message": f"Function '{h['name']}' has cyclomatic complexity {h['complexity']}.",
+                "title": "High complexity",
+            })
+        health = report.get("health", {})
+        out = {
+            "name": "repoglance",
+            "head_sha": "__SHA__",
+            "status": "completed",
+            "conclusion": "neutral",
+            "output": {
+                "title": f"Health {health.get('score','?')}/100 ({health.get('grade','?')})",
+                "summary": f"{len(anns)} complexity hotspot(s) at or above {threshold}.",
+                "annotations": anns[:50],
+            },
+        }
+        print(json.dumps(out))
+        PY
+        sha="${{ github.event.pull_request.head.sha || github.sha }}"
+        sed -i "s/__SHA__/$sha/" "$RUNNER_TEMP/checkrun.json"
+        gh api -X POST "repos/${{ github.repository }}/check-runs" --input "$RUNNER_TEMP/checkrun.json" >/dev/null || true
 
     - name: Gate
       shell: bash

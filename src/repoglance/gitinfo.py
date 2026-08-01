@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+_SPARKS = "▁▂▃▄▅▆▇█"
+
 
 @dataclass
 class GitStats:
@@ -15,6 +17,14 @@ class GitStats:
     first_commit: str
     last_commit: str
     active_days: int               # distinct YYYY-MM-DD with commits
+    monthly: List[tuple] = None    # (YYYY-MM, count) oldest->newest, last 12
+
+    def sparkline(self) -> str:
+        if not self.monthly:
+            return ""
+        counts = [c for _, c in self.monthly]
+        hi = max(counts) or 1
+        return "".join(_SPARKS[min(len(_SPARKS) - 1, (c * (len(_SPARKS) - 1)) // hi)] for c in counts)
 
 
 def _run(root: Path, args: List[str]) -> Optional[str]:
@@ -84,6 +94,9 @@ def collect(root: Path) -> Optional[GitStats]:
     first = (_run(root, ["log", "--reverse", "--format=%cd", "--date=short"]) or "").splitlines()
     last = (_run(root, ["log", "-1", "--format=%cd", "--date=short"]) or "").strip()
 
+    months = _tally(_run(root, ["log", "--format=%cd", "--date=format:%Y-%m"]))
+    monthly = sorted(months, key=lambda kv: kv[0])[-12:]
+
     return GitStats(
         total_commits=total_commits,
         contributors=contributors[:10],
@@ -91,4 +104,5 @@ def collect(root: Path) -> Optional[GitStats]:
         first_commit=first[0].strip() if first else "?",
         last_commit=last or "?",
         active_days=len(days),
+        monthly=monthly,
     )

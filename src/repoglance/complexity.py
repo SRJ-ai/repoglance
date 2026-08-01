@@ -47,6 +47,9 @@ class FuncScore:
     nloc: int = 0          # logical lines of code (from lizard)
     tokens: int = 0        # token count (from lizard; used for Halstead-ish MI)
     params: int = 0
+    is_python: bool = False
+    has_doc: bool = False   # Python: function has a docstring
+    typed: bool = False     # Python: has a return or parameter annotation
 
 
 def _lizard_scores(source: str, rel_path: str) -> Optional[List[FuncScore]]:
@@ -96,7 +99,16 @@ def python_complexity(source: str, rel_path: str) -> List[FuncScore]:
 
         def visit_FunctionDef(self, node):
             cx, nloc, tokens, params = self._measure(node)
-            scores.append(FuncScore(rel_path, node.name, node.lineno, cx, nloc, tokens, params))
+            has_doc = ast.get_docstring(node) is not None
+            a = node.args
+            typed = node.returns is not None or any(
+                arg.annotation is not None
+                for arg in (*a.args, *getattr(a, "posonlyargs", []), *a.kwonlyargs)
+            )
+            scores.append(FuncScore(
+                rel_path, node.name, node.lineno, cx, nloc, tokens, params,
+                is_python=True, has_doc=has_doc, typed=typed,
+            ))
             self.generic_visit(node)
 
         visit_AsyncFunctionDef = visit_FunctionDef

@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-01
+
+### Added
+- **Refactor priority**: files ranked by **churn × complexity** — frequently
+  changed *and* complex code, the classic "fix this first" signal. Shown as a
+  panel and in JSON (`risk`).
+- **Coverage × complexity** (`--coverage <cobertura.xml|lcov>`): surfaces
+  complex, poorly-covered files (risk = complexity × (1 − coverage)).
+- **Python quality**: docstring and type-hint coverage across functions.
+- **Import graph** (`--imports`): intra-repo Python module coupling and
+  **circular-import detection**.
+- **Longest functions**: biggest functions by logical lines (in JSON).
+- **Activity trend**: commits-per-month sparkline in the git panel.
+- **GitHub Action inline annotations** (`annotations: true`): a Check Run places
+  complexity warnings on the exact lines in a PR.
+
 ## [0.4.3] - 2026-08-01
 
 ### Added

@@ -47,6 +47,8 @@ def _resolve(cli_val, cfg, key, default):
 @click.option("--include-vendored", is_flag=True, help="Analyze vendored/generated files instead of excluding them.")
 @click.option("--cache", "cache_path", type=click.Path(dir_okay=False, path_type=Path), help="Incremental cache file to speed up repeat runs.")
 @click.option("--watch", is_flag=True, help="Re-render the report whenever files change (Ctrl-C to stop).")
+@click.option("--imports", "want_imports", is_flag=True, help="Build the Python import graph and detect circular imports.")
+@click.option("--coverage", "coverage_path", type=click.Path(dir_okay=False, exists=True, path_type=Path), help="Cross a coverage report (Cobertura XML or lcov) with complexity.")
 # comparison
 @click.option("--compare", "compare_to", type=click.Path(dir_okay=False, exists=True, path_type=Path), help="Compare against a baseline snapshot and show deltas.")
 @click.option("--fail-on-regression", is_flag=True, help="Exit nonzero if --compare finds new/worse complexity.")
@@ -59,8 +61,8 @@ def _resolve(cli_val, cfg, key, default):
 def main(path, as_json, as_md, as_csv, as_sarif, sarif_threshold, html_path, svg_path,
          badge_path, badge_json_path, baseline_out, since_rev, include, exclude, ignore,
          no_git, max_bytes, jobs, use_processes, fast, want_dupes, want_owners,
-         include_vendored, cache_path, watch, compare_to, fail_on_regression, ci,
-         max_complexity, max_todos, fail_under):
+         include_vendored, cache_path, watch, want_imports, coverage_path, compare_to,
+         fail_on_regression, ci, max_complexity, max_todos, fail_under):
     """Instant, gorgeous insight into any code repository.
 
     PATH defaults to the current directory. Configuration may be supplied via
@@ -94,6 +96,14 @@ def main(path, as_json, as_md, as_csv, as_sarif, sarif_threshold, html_path, svg
     if not result.files:
         click.echo("No source files found.", err=True)
         sys.exit(1)
+
+    if want_imports:
+        from . import analytics
+        result.imports = analytics.import_graph(result)
+    if coverage_path:
+        from . import covreport
+        cov = covreport.parse_coverage(coverage_path)
+        result.coverage_rows = covreport.risk_by_coverage(result, cov)
 
     git_stats = None if no_git else gitinfo.collect(result.root)
 

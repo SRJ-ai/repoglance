@@ -142,8 +142,30 @@ def _git_panel(git: GitStats) -> Panel:
         a = f"{top_authors[i][0]} ({top_authors[i][1]})" if i < len(top_authors) else ""
         h = f"{top_files[i][0]} ×{top_files[i][1]}" if i < len(top_files) else ""
         table.add_row(Text(a, style="white"), Text(h, style="dim"))
-    footer = Text(f"\n{git.active_days} active days", style="dim")
+    spark = git.sparkline()
+    trend = f"\n{git.active_days} active days"
+    if spark:
+        trend += f"    commits/mo {spark}"
+    footer = Text(trend, style="dim")
     return Panel(Group(table, footer), title="[bold]Git activity[/]", border_style="red", title_align="left")
+
+
+def _risk_panel(res: ScanResult, git) -> Panel:
+    from .analytics import risk_ranking
+
+    rows = risk_ranking(res, git, top=8)
+    table = Table.grid(padding=(0, 2))
+    table.add_column(justify="right", no_wrap=True)
+    table.add_column(justify="right")
+    table.add_column(justify="left")
+    table.add_row(Text("risk", style="bold"), Text("cx×churn", style="bold"), Text("file", style="bold"))
+    for r in rows:
+        table.add_row(
+            Text(str(r["risk"]), style="bold red"),
+            Text(f"{r['complexity']}×{r['churn']}", style="yellow"),
+            Text(r["path"], style="cyan"),
+        )
+    return Panel(table, title="[bold]Refactor priority (churn × complexity)[/]", border_style="red", title_align="left")
 
 
 def _health_panel(res: ScanResult) -> Panel:
@@ -192,10 +214,20 @@ def render(console: Console, res: ScanResult, git: Optional[GitStats]) -> None:
     console.print(_language_table(res))
     console.print(Columns([_hotspots_panel(res), _biggest_panel(res)], expand=True))
     console.print(_directories_panel(res))
+    from .analytics import python_quality
+    pq = python_quality(res)
+    if pq:
+        console.print(Panel(
+            Text(f"Python: {pq['doc_coverage'] * 100:.0f}% documented, "
+                 f"{pq['type_coverage'] * 100:.0f}% type-hinted "
+                 f"({pq['functions']} functions)", style="white"),
+            title="[bold]Python quality[/]", border_style="green", title_align="left"))
     if res.contents:
         console.print(_duplicates_panel(res))
     console.print(_todos_panel(res))
     if git:
+        risk = _risk_panel(res, git)
+        console.print(risk)
         console.print(_git_panel(git))
 
 
@@ -367,6 +399,16 @@ def build_payload(res: ScanResult, git: Optional[GitStats]) -> dict:
         "maintainability_index": maintainability_index(res),
         "vendored_files": res.vendored_files,
     }
+    from . import analytics
+    payload["risk"] = analytics.risk_ranking(res, git)
+    payload["longest_functions"] = analytics.longest_functions(res)
+    pq = analytics.python_quality(res)
+    if pq:
+        payload["python_quality"] = pq
+    if res.imports is not None:
+        payload["imports"] = res.imports
+    if res.coverage_rows is not None:
+        payload["coverage_risk"] = res.coverage_rows
     from .plugins import run_plugins
     plugin_out = run_plugins(res)
     if plugin_out:
@@ -392,6 +434,7 @@ def build_payload(res: ScanResult, git: Optional[GitStats]) -> dict:
             "first_commit": git.first_commit,
             "last_commit": git.last_commit,
             "active_days": git.active_days,
+            "monthly": [{"month": m, "commits": c} for m, c in (git.monthly or [])],
         }
     return payload
 

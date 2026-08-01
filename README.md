@@ -80,6 +80,8 @@ repoglance --ci --fail-under 70 --max-complexity 25     # gate a build
 repoglance --include "src/**" --exclude "**/*_pb2.py"   # glob filters
 repoglance --duplicates          # detect copy-paste blocks
 repoglance --owners              # attribute hotspots to authors (git blame)
+repoglance --imports             # python import graph + circular imports
+repoglance --coverage coverage.xml   # cross coverage with complexity
 repoglance --cache .rg.cache     # incremental cache for fast repeat runs
 repoglance --watch               # live re-render on file changes
 repoglance --no-git --jobs 8
@@ -100,6 +102,11 @@ repoglance --json | jq '.languages.Python.code'
 | **Languages** | Lines of code per language, ranked, with % bars |
 | **Complexity hotspots** | Real per-function cyclomatic complexity across 15+ languages (C/C++, Java, C#, JS, TS, Go, Rust, Ruby, PHP, Swift, Kotlin, Python…) via [lizard](https://github.com/terryyin/lizard) |
 | **Maintainability index** | Approximate MI (0–100) from complexity, size and token counts |
+| **Refactor priority** | Files ranked by churn × complexity — what to fix first |
+| **Coverage risk** | Cross a coverage report with complexity (`--coverage`): complex + untested = danger |
+| **Python quality** | Docstring and type-hint coverage across functions |
+| **Import graph** | Python module coupling + circular-import detection (`--imports`) |
+| **Longest functions** | The biggest functions by logical lines |
 | **Duplicate code** | Copy-paste blocks across files, with a duplication % |
 | **TODO tracker** | Every `TODO` / `FIXME` / `HACK` / `XXX` / `BUG` with file:line |
 | **Biggest files & directories** | Where the mass and the worst complexity live |
@@ -123,6 +130,9 @@ gives you artifacts you can put in a PR or a README.
 |---|:---:|:---:|:---:|:---:|
 | Lines-of-code by language | ✅ | ✅ | ✅ | ✅ |
 | Per-function complexity (15+ langs) | ✅ | ❌ | ⚠️ file-level | ❌ |
+| **Refactor priority (churn × complexity)** | ✅ | ❌ | ❌ | ❌ |
+| **Coverage × complexity risk** | ✅ | ❌ | ❌ | ❌ |
+| **Circular-import detection** | ✅ | ❌ | ❌ | ❌ |
 | Maintainability index | ✅ | ❌ | ❌ | ❌ |
 | TODO / FIXME tracker | ✅ | ❌ | ❌ | ❌ |
 | Git activity (authors, churn) | ✅ | ❌ | ❌ | ❌ |

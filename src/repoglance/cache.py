@@ -12,7 +12,7 @@ from typing import Dict, Optional
 from .complexity import FuncScore
 from .scanner import FileStat, Todo
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def load(path: Optional[Path]) -> Dict[str, dict]:
@@ -46,7 +46,11 @@ def entry_from(stat: FileStat, todos, scores, vendored: bool, mtime: float) -> d
         "stat": [stat.language, stat.lines, stat.code_lines, stat.blank_lines, stat.comment_lines],
         "vendored": vendored,
         "todos": [[t.line, t.marker, t.text] for t in todos],
-        "scores": [[s.name, s.line, s.complexity, s.nloc, s.tokens, s.params] for s in scores],
+        "scores": [
+            [s.name, s.line, s.complexity, s.nloc, s.tokens, s.params,
+             s.is_python, s.has_doc, s.typed]
+            for s in scores
+        ],
     }
 
 
@@ -55,5 +59,8 @@ def rebuild(rel: str, entry: dict):
     lang, lines, code, blank, comment = entry["stat"]
     stat = FileStat(rel, lang, lines, code, blank, comment, entry["size"])
     todos = [Todo(rel, ln, m, t) for ln, m, t in entry["todos"]]
-    scores = [FuncScore(rel, n, ln, cx, nloc, tok, pr) for n, ln, cx, nloc, tok, pr in entry["scores"]]
+    scores = [
+        FuncScore(rel, n, ln, cx, nloc, tok, pr, ispy, doc, typed)
+        for n, ln, cx, nloc, tok, pr, ispy, doc, typed in entry["scores"]
+    ]
     return stat, todos, scores, entry.get("vendored", False)
