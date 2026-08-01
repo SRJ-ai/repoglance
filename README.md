@@ -40,9 +40,9 @@ repolens run against well-known projects (click to view the full report):
 
 | Project | Files | Lines of code | Health |
 |---|--:|--:|:--:|
-| [flask](assets/showcase/flask.svg) | 200 | 25,030 | D (63) |
-| [httpie](assets/showcase/httpie.svg) | 217 | 19,604 | D (60) |
-| [requests](assets/showcase/requests.svg) | 71 | 13,215 | D (65) |
+| [flask](assets/showcase/flask.svg) | 200 | 25,030 | D (64) |
+| [httpie](assets/showcase/httpie.svg) | 217 | 19,604 | D (62) |
+| [requests](assets/showcase/requests.svg) | 71 | 13,215 | D (69) |
 
 <div align="center">
 

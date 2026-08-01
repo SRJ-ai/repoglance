@@ -136,24 +136,46 @@ def scan(
             result.files.append(
                 FileStat(rel, language, total, code, blank, comment, size)
             )
-            _collect_todos(text, rel, result.todos)
+            _collect_todos(text, rel, language, result.todos)
 
     return result
 
 
-def _collect_todos(text: str, rel: str, out: List[Todo]) -> None:
+# Line-comment tokens per language, used to confine TODO scanning to comments so
+# marker *words* in prose or code (e.g. "TODO tracker", a marker list) aren't
+# counted as debt.
+_LINE_COMMENT = {
+    "Python": ("#",), "Ruby": ("#",), "Shell": ("#",), "YAML": ("#",),
+    "PowerShell": ("#",), "R": ("#",), "TOML": ("#",), "Makefile": ("#",),
+    "JavaScript": ("//",), "TypeScript": ("//",), "Go": ("//",), "Rust": ("//",),
+    "Java": ("//",), "C": ("//",), "C++": ("//",), "C#": ("//",),
+    "PHP": ("//", "#"), "Swift": ("//",), "SCSS": ("//",), "Kotlin": ("//",),
+    "Scala": ("//",), "Dart": ("//",), "Lua": ("--",), "SQL": ("--",),
+}
+
+
+def _collect_todos(text: str, rel: str, language: str, out: List[Todo]) -> None:
+    prefixes = _LINE_COMMENT.get(language)
+    if not prefixes:
+        # No reliable line-comment syntax (markup/data/prose) — skip to avoid
+        # false positives from documentation that merely mentions the markers.
+        return
     for i, line in enumerate(text.splitlines(), start=1):
-        upper = line.upper()
+        # Only consider the portion of the line inside a line comment.
+        starts = [line.find(p) for p in prefixes if line.find(p) != -1]
+        if not starts:
+            continue
+        comment_part = line[min(starts):]
+        upper = comment_part.upper()
         for marker in TODO_MARKERS:
             idx = upper.find(marker)
             if idx == -1:
                 continue
-            # Require a non-alphanumeric boundary so "AUTOMOBILE" != "BUG"-ish hits.
+            # Require non-alphanumeric boundaries so "DEBUG" != "BUG" etc.
             before = upper[idx - 1] if idx > 0 else " "
             after_idx = idx + len(marker)
             after = upper[after_idx] if after_idx < len(upper) else " "
             if before.isalnum() or after.isalnum():
                 continue
-            snippet = line[idx:].strip().rstrip()
-            out.append(Todo(rel, i, marker, snippet[:120]))
+            out.append(Todo(rel, i, marker, comment_part[idx:].strip()[:120]))
             break
