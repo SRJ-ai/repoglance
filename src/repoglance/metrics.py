@@ -66,3 +66,25 @@ def compute(res: ScanResult) -> Health:
 
     score = sum(p for _, p, _, _ in factors)
     return Health(score=score, grade=_grade(score), factors=factors)
+
+
+def maintainability_index(res) -> int:
+    """Approximate Microsoft Maintainability Index (0-100), averaged over
+    functions and weighted by size. Uses lizard's token/nloc counts as a
+    Halstead-volume proxy. Returns 100 when there is nothing to measure.
+    """
+    import math
+
+    total_w = 0.0
+    acc = 0.0
+    for s in res.func_scores:
+        nloc = max(s.nloc, 1)
+        tokens = max(s.tokens, 1)
+        volume = tokens * math.log2(tokens + 1)
+        mi = 171 - 5.2 * math.log(volume) - 0.23 * s.complexity - 16.2 * math.log(nloc)
+        mi = max(0.0, min(100.0, mi * 100.0 / 171.0))
+        acc += mi * nloc
+        total_w += nloc
+    if total_w == 0:
+        return 100
+    return round(acc / total_w)

@@ -41,9 +41,9 @@ repoglance run against well-known projects (click to view the full report):
 
 | Project | Files | Lines of code | Health |
 |---|--:|--:|:--:|
-| [flask](assets/showcase/flask.svg) | 209 | 25,293 | D (64) |
-| [httpie](assets/showcase/httpie.svg) | 236 | 20,114 | D (62) |
-| [requests](assets/showcase/requests.svg) | 89 | 13,785 | C (70) |
+| [flask](assets/showcase/flask.svg) | 209 | 25,293 | D (67) |
+| [httpie](assets/showcase/httpie.svg) | 236 | 20,114 | D (66) |
+| [requests](assets/showcase/requests.svg) | 89 | 13,785 | C (72) |
 
 <div align="center">
 
@@ -69,12 +69,17 @@ pipx run repoglance .
 repoglance                       # analyze current directory
 repoglance path/to/repo          # analyze another repo
 repoglance --json                # machine-readable output for scripts / CI
+repoglance --csv                 # per-file CSV
+repoglance --sarif               # SARIF for GitHub code scanning
 repoglance --svg report.svg      # export a vector report
 repoglance --html report.html    # export a browser report
 repoglance --badge badge.svg     # export an embeddable badge
-repoglance --ci --max-complexity 25   # fail CI on hotspots
-repoglance --no-git              # skip git history
-repoglance --ignore dist --ignore fixtures
+repoglance --since origin/main   # only files changed since a revision
+repoglance --baseline base.json                         # snapshot now
+repoglance --compare base.json --fail-on-regression     # fail on new complexity
+repoglance --ci --fail-under 70 --max-complexity 25     # gate a build
+repoglance --include "src/**" --exclude "**/*_pb2.py"   # glob filters
+repoglance --no-git --jobs 8
 ```
 
 ### JSON output
@@ -90,9 +95,10 @@ repoglance --json | jq '.languages.Python.code'
 | Section | What you get |
 |---|---|
 | **Languages** | Lines of code per language, ranked, with % bars |
-| **Complexity hotspots** | Per-function cyclomatic complexity (Python via AST; heuristic for other langs) |
+| **Complexity hotspots** | Real per-function cyclomatic complexity across 15+ languages (C/C++, Java, C#, JS, TS, Go, Rust, Ruby, PHP, Swift, Kotlin, Python…) via [lizard](https://github.com/terryyin/lizard) |
+| **Maintainability index** | Approximate MI (0–100) from complexity, size and token counts |
 | **TODO tracker** | Every `TODO` / `FIXME` / `HACK` / `XXX` / `BUG` with file:line |
-| **Biggest files** | The files most likely to need splitting |
+| **Biggest files & directories** | Where the mass and the worst complexity live |
 | **Git activity** | Top authors, most-churned files, active days, project lifespan |
 
 Binary files, `node_modules`, `.venv`, build dirs and friends are skipped
@@ -107,14 +113,17 @@ gives you artifacts you can put in a PR or a README.
 | | repoglance | tokei | scc | cloc |
 |---|:---:|:---:|:---:|:---:|
 | Lines-of-code by language | ✅ | ✅ | ✅ | ✅ |
-| Complexity hotspots (per function) | ✅ | ❌ | ⚠️ file-level | ❌ |
+| Per-function complexity (15+ langs) | ✅ | ❌ | ⚠️ file-level | ❌ |
+| Maintainability index | ✅ | ❌ | ❌ | ❌ |
 | TODO / FIXME tracker | ✅ | ❌ | ❌ | ❌ |
 | Git activity (authors, churn) | ✅ | ❌ | ❌ | ❌ |
-| JSON output | ✅ | ✅ | ✅ | ✅ |
+| Respects `.gitignore` | ✅ | ✅ | ✅ | ❌ |
+| JSON / CSV / **SARIF** output | ✅ | ⚠️ | ⚠️ | ⚠️ |
 | **HTML / SVG report export** | ✅ | ❌ | ❌ | ❌ |
 | **Embeddable repo badge** | ✅ | ❌ | ❌ | ❌ |
-| **CI gate (`--max-complexity`)** | ✅ | ❌ | ❌ | ❌ |
-| Zero install deps beyond one `pip` | ✅ | (binary) | (binary) | (perl) |
+| **Diff mode (`--since`) + baselines** | ✅ | ❌ | ❌ | ❌ |
+| **CI gate + regression ratchet** | ✅ | ❌ | ❌ | ❌ |
+| **Config file** (`[tool.repoglance]`) | ✅ | ✅ | ❌ | ❌ |
 
 ## Share it: badges & reports
 
@@ -206,6 +215,27 @@ repoglance --badge-json .repoglance-badge.json   # commit this file
 ```bash
 repoglance --md   # paste into a PR, wiki, or Slack
 ```
+
+### Configuration file
+
+Set defaults once via `.repoglance.toml` or a `[tool.repoglance]` table in
+`pyproject.toml` (CLI flags always win):
+
+```toml
+[tool.repoglance]
+exclude = ["**/*_pb2.py", "vendor/**"]
+max_complexity = 25
+fail_under = 70
+```
+
+### Docker & GitLab
+
+```bash
+docker run --rm -v "$PWD:/repo" repoglance /repo
+```
+
+A ready-to-copy GitLab CI job lives in
+[`integrations/gitlab-ci.yml`](integrations/gitlab-ci.yml).
 
 ## Design goals
 

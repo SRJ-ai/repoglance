@@ -21,6 +21,14 @@ inputs:
     description: "Fail the job if any function exceeds this cyclomatic complexity. Empty to disable."
     required: false
     default: ""
+  sarif:
+    description: "Generate SARIF and upload it to GitHub code scanning (requires security-events: write)."
+    required: false
+    default: "false"
+  diff-base:
+    description: "Only analyze files changed since this git ref (e.g. origin/main). Empty = whole repo."
+    required: false
+    default: ""
   github-token:
     description: "Token used to post the PR comment."
     required: false
@@ -41,8 +49,21 @@ runs:
     - name: Job summary + Markdown report
       shell: bash
       run: |
-        repoglance "${{ inputs.path }}" --md > "$RUNNER_TEMP/repoglance.md"
+        since=""
+        [ -n "${{ inputs.diff-base }}" ] && since="--since ${{ inputs.diff-base }}"
+        repoglance "${{ inputs.path }}" $since --md > "$RUNNER_TEMP/repoglance.md"
         cat "$RUNNER_TEMP/repoglance.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Generate SARIF
+      if: ${{ inputs.sarif == 'true' }}
+      shell: bash
+      run: repoglance "${{ inputs.path }}" --sarif > "$RUNNER_TEMP/repoglance.sarif"
+
+    - name: Upload SARIF
+      if: ${{ inputs.sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/repoglance.sarif
 
     - name: Comment on PR
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}

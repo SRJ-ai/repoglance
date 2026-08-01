@@ -1,0 +1,7 @@
+site_name: repoglance
+site_description: Instant, gorgeous insight into any code repository.
+repo_url: https://github.com/SRJ-ai/repoglance
+theme:
+  name: readthedocs
+nav:
+  - Home: index.md

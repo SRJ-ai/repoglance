@@ -1,14 +1,22 @@
-"""Cyclomatic-complexity estimation for Python via AST.
+"""Cyclomatic-complexity analysis.
 
-For non-Python files we fall back to a cheap branch-keyword heuristic so the
-report still surfaces likely hotspots without language-specific parsers.
+Uses `lizard <https://github.com/terryyin/lizard>`_ for real, function-level
+cyclomatic complexity across many languages (C/C++, Java, C#, JavaScript,
+TypeScript, Go, Rust, Ruby, PHP, Swift, Scala, Kotlin, Objective-C, Lua and
+Python). If lizard is unavailable or has no reader for a language, we fall back
+to a Python AST analyzer and finally to a cheap branch-keyword heuristic.
 """
 from __future__ import annotations
 
 import ast
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
+
+try:  # lizard is a runtime dependency, but degrade gracefully if missing.
+    import lizard as _lizard
+except Exception:  # pragma: no cover - only when dependency absent
+    _lizard = None
 
 # AST nodes that each add a decision point (McCabe-style).
 _BRANCH_NODES = (
@@ -18,7 +26,7 @@ _BRANCH_NODES = (
 
 _BOOLOP_EXTRA = ast.BoolOp  # each extra operand adds a path
 
-# Keyword heuristic for non-Python source.
+# Keyword heuristic for languages lizard cannot read.
 _BRANCH_RE = re.compile(
     r"\b(if|else if|elif|for|while|case|catch|except|&&|\|\||\?)\b|\?\s*[^:]+:"
 )
@@ -36,10 +44,33 @@ class FuncScore:
     name: str
     line: int
     complexity: int
+    nloc: int = 0          # logical lines of code (from lizard)
+    tokens: int = 0        # token count (from lizard; used for Halstead-ish MI)
+    params: int = 0
+
+
+def _lizard_scores(source: str, rel_path: str) -> Optional[List[FuncScore]]:
+    """Real per-function complexity via lizard, or ``None`` if unsupported."""
+    if _lizard is None:
+        return None
+    try:
+        analysis = _lizard.analyze_file.analyze_source_code(rel_path, source)
+    except Exception:
+        return None
+    funcs = analysis.function_list
+    if not funcs:
+        return None
+    return [
+        FuncScore(
+            rel_path, f.name, f.start_line, f.cyclomatic_complexity,
+            f.nloc, f.token_count, len(f.parameters),
+        )
+        for f in funcs
+    ]
 
 
 def python_complexity(source: str, rel_path: str) -> List[FuncScore]:
-    """Return per-function complexity for a Python source string."""
+    """AST-based fallback for Python when lizard is unavailable."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -58,11 +89,7 @@ def python_complexity(source: str, rel_path: str) -> List[FuncScore]:
             return complexity
 
         def visit_FunctionDef(self, node):
-            scores.append(
-                FuncScore(rel_path, node.name, node.lineno, self._score(node))
-            )
-            # Do not recurse into nested funcs separately; walk() already covered
-            # them for the parent's score. Still visit to catch module-level peers.
+            scores.append(FuncScore(rel_path, node.name, node.lineno, self._score(node)))
             self.generic_visit(node)
 
         visit_AsyncFunctionDef = visit_FunctionDef
@@ -72,8 +99,21 @@ def python_complexity(source: str, rel_path: str) -> List[FuncScore]:
 
 
 def heuristic_complexity(source: str, rel_path: str) -> int:
-    """Whole-file branch-keyword count for non-Python languages."""
+    """Whole-file branch-keyword count — last-resort for unreadable languages."""
     return 1 + len(_BRANCH_RE.findall(source))
+
+
+def analyze_complexity(source: str, rel_path: str, language: str) -> List[FuncScore]:
+    """Return per-function complexity, preferring lizard's real analysis."""
+    if language in NON_CODE_LANGS:
+        return []
+    scores = _lizard_scores(source, rel_path)
+    if scores is not None:
+        return scores
+    if language == "Python":
+        return python_complexity(source, rel_path)
+    score = heuristic_complexity(source, rel_path)
+    return [FuncScore(rel_path, "(file)", 1, score)] if score > 1 else []
 
 
 def rank_hotspots(result, top: int = 10) -> List[FuncScore]:
@@ -83,3 +123,7 @@ def rank_hotspots(result, top: int = 10) -> List[FuncScore]:
     just a sort — no filesystem access.
     """
     return sorted(result.func_scores, key=lambda s: s.complexity, reverse=True)[:top]
+
+
+def lizard_available() -> bool:
+    return _lizard is not None

@@ -7,13 +7,15 @@ so every file is read exactly once.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
-from .complexity import FuncScore, heuristic_complexity, python_complexity, NON_CODE_LANGS
+from .complexity import FuncScore, analyze_complexity
 from .languages import lang_for
 
 # Directories never worth scanning (used only on the non-git fallback path).
@@ -142,6 +144,21 @@ def _count_lines(text: str, language: str):
     return total, code, blank, comment
 
 
+def changed_files(root: os.PathLike, since_rev: str) -> Optional[set]:
+    """Repo-relative paths changed since ``since_rev`` (for --since / diff mode)."""
+    root_path = Path(root).resolve()
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root_path), "diff", "--name-only", since_rev, "--"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    return {line.strip() for line in out.stdout.splitlines() if line.strip()}
+
+
 def _git_tracked(root: Path) -> Optional[List[str]]:
     """Return repo-relative paths git considers part of the tree (honoring
     .gitignore), or ``None`` when ``root`` is not a git repository."""
@@ -158,52 +175,102 @@ def _git_tracked(root: Path) -> Optional[List[str]]:
     return [line for line in out.stdout.splitlines() if line]
 
 
+def _glob_ok(rel: str, include, exclude) -> bool:
+    """Apply include/exclude glob patterns (fnmatch) to a repo-relative path."""
+    if exclude and any(fnmatch.fnmatch(rel, p) for p in exclude):
+        return False
+    if include and not any(fnmatch.fnmatch(rel, p) for p in include):
+        return False
+    return True
+
+
 def scan(
     root: os.PathLike,
     max_bytes: int = 2_000_000,
     extra_ignores: Optional[set] = None,
+    include: Optional[Iterable[str]] = None,
+    exclude: Optional[Iterable[str]] = None,
+    changed_only: Optional[set] = None,
+    jobs: Optional[int] = None,
 ) -> ScanResult:
-    """Walk ``root`` and gather per-file line/language/complexity stats."""
+    """Walk ``root`` and gather per-file line/language/complexity stats.
+
+    Files are processed in a thread pool (I/O-bound), so ordering is restored by
+    sorting the results afterwards for stable output.
+    """
     root_path = Path(root).resolve()
     result = ScanResult(root=root_path)
     ignore = IGNORE_DIRS | (extra_ignores or set())
+    include = list(include) if include else None
+    exclude = list(exclude) if exclude else None
 
     tracked = _git_tracked(root_path)
     if tracked is not None:
         result.used_gitignore = True
-        paths = []
+        candidates = []
         for rel in tracked:
-            # Still honor explicit extra ignores on the git path.
             if extra_ignores and any(part in extra_ignores for part in rel.split("/")):
                 continue
-            paths.append(root_path / rel)
+            candidates.append(root_path / rel)
     else:
-        paths = _walk(root_path, ignore)
+        candidates = _walk(root_path, ignore)
 
-    for full in paths:
+    # Pre-filter to files we will actually parse.
+    todo: List[Path] = []
+    for full in candidates:
         fn = full.name
         ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
         if ext.lower() in BINARY_EXT:
             result.skipped_binary += 1
             continue
-        language = lang_for(ext, fn)
-        if not language:
+        if not lang_for(ext, fn):
             continue
-        try:
-            size = full.stat().st_size
-            if size > max_bytes:
-                continue
-            text = full.read_text(encoding="utf-8", errors="ignore")
-        except (OSError, ValueError):
-            continue
-
         rel = full.relative_to(root_path).as_posix()
-        total, code, blank, comment = _count_lines(text, language)
-        result.files.append(FileStat(rel, language, total, code, blank, comment, size))
-        _collect_todos(text, rel, language, result.todos)
-        _score_complexity(text, rel, language, result.func_scores)
+        if changed_only is not None and rel not in changed_only:
+            continue
+        if not _glob_ok(rel, include, exclude):
+            continue
+        todo.append(full)
 
+    workers = jobs or min(32, (os.cpu_count() or 4) * 4)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        processed = list(pool.map(lambda p: _process_file(p, root_path, max_bytes), todo))
+
+    for item in processed:
+        if item is None:
+            continue
+        stat, todos, scores = item
+        result.files.append(stat)
+        result.todos.extend(todos)
+        result.func_scores.extend(scores)
+
+    # Deterministic output regardless of thread completion order.
+    result.files.sort(key=lambda f: f.path)
+    result.todos.sort(key=lambda t: (t.path, t.line))
     return result
+
+
+def _process_file(full: Path, root_path: Path, max_bytes: int):
+    """Read and analyze one file. Returns (FileStat, todos, scores) or None."""
+    fn = full.name
+    ext = fn.rsplit(".", 1)[-1] if "." in fn else ""
+    language = lang_for(ext, fn)
+    try:
+        size = full.stat().st_size
+        if size > max_bytes:
+            return None
+        text = full.read_text(encoding="utf-8", errors="ignore")
+    except (OSError, ValueError):
+        return None
+
+    rel = full.relative_to(root_path).as_posix()
+    total, code, blank, comment = _count_lines(text, language)
+    stat = FileStat(rel, language, total, code, blank, comment, size)
+    todos: List[Todo] = []
+    scores: List[FuncScore] = []
+    _collect_todos(text, rel, language, todos)
+    _score_complexity(text, rel, language, scores)
+    return stat, todos, scores
 
 
 def _walk(root_path: Path, ignore: set):
@@ -218,12 +285,7 @@ def _walk(root_path: Path, ignore: set):
 
 def _score_complexity(text: str, rel: str, language: str, out: List[FuncScore]) -> None:
     """Compute complexity from already-read text (no second file read)."""
-    if language == "Python":
-        out.extend(python_complexity(text, rel))
-    elif language not in NON_CODE_LANGS:
-        score = heuristic_complexity(text, rel)
-        if score > 1:
-            out.append(FuncScore(rel, "(file)", 1, score))
+    out.extend(analyze_complexity(text, rel, language))
 
 
 def _collect_todos(text: str, rel: str, language: str, out: List[Todo]) -> None:

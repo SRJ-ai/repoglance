@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "repoglance"
-version = "0.2.2"
+version = "0.3.0"
 description = "Instant, gorgeous insight into any code repository — languages, complexity hotspots, TODOs and git activity in one terminal command."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,6 +26,8 @@ classifiers = [
 dependencies = [
     "rich>=13.0",
     "click>=8.0",
+    "lizard>=1.17",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.urls]

@@ -15,6 +15,7 @@ from .complexity import rank_hotspots
 from .gitinfo import GitStats
 from .languages import color_for
 from .metrics import compute as compute_health
+from .metrics import maintainability_index
 from .scanner import ScanResult
 
 _BAR = "█"
@@ -166,11 +167,30 @@ def _health_panel(res: ScanResult) -> Panel:
     return Panel(Group(headline, Text(""), table), title="[bold]Health score[/]", border_style=grade_color, title_align="left")
 
 
+def _directories_panel(res: ScanResult) -> Panel:
+    rows = directory_rollup(res)[:8]
+    table = Table.grid(padding=(0, 2))
+    table.add_column(justify="left", no_wrap=True)
+    table.add_column(justify="right")
+    table.add_column(justify="right")
+    table.add_row(Text("directory", style="bold"), Text("loc", style="bold"), Text("worst cx", style="bold"))
+    for r in rows:
+        cx = r["worst_complexity"]
+        cx_color = "red" if cx >= 20 else "yellow" if cx >= 10 else "green"
+        table.add_row(
+            Text(r["dir"], style="cyan"),
+            Text(f"{r['code']:,}", style="white"),
+            Text(str(cx), style=cx_color),
+        )
+    return Panel(table, title="[bold]Directories[/]", border_style="blue", title_align="left")
+
+
 def render(console: Console, res: ScanResult, git: Optional[GitStats]) -> None:
     console.print(_header(res, git))
     console.print(_health_panel(res))
     console.print(_language_table(res))
     console.print(Columns([_hotspots_panel(res), _biggest_panel(res)], expand=True))
+    console.print(_directories_panel(res))
     console.print(_todos_panel(res))
     if git:
         console.print(_git_panel(git))
@@ -265,7 +285,30 @@ def to_markdown(res: ScanResult, git: Optional[GitStats]) -> str:
     return "\n".join(out)
 
 
-def to_json(res: ScanResult, git: Optional[GitStats]) -> str:
+def directory_rollup(res: ScanResult, depth: int = 1):
+    """Aggregate code lines and worst complexity per top-level directory."""
+    dirs: dict = {}
+    worst: dict = {}
+    for f in res.files:
+        parts = f.path.split("/")
+        key = "/".join(parts[:depth]) if len(parts) > depth else (parts[0] if len(parts) > 1 else ".")
+        d = dirs.setdefault(key, {"code": 0, "files": 0})
+        d["code"] += f.code_lines
+        d["files"] += 1
+    for s in res.func_scores:
+        parts = s.path.split("/")
+        key = "/".join(parts[:depth]) if len(parts) > depth else (parts[0] if len(parts) > 1 else ".")
+        worst[key] = max(worst.get(key, 0), s.complexity)
+    rows = [
+        {"dir": k, "code": v["code"], "files": v["files"], "worst_complexity": worst.get(k, 0)}
+        for k, v in dirs.items()
+    ]
+    rows.sort(key=lambda r: r["code"], reverse=True)
+    return rows
+
+
+def build_payload(res: ScanResult, git: Optional[GitStats]) -> dict:
+    """The structured report used by --json and as a baseline snapshot."""
     agg = res.by_language()
     h = compute_health(res)
     payload = {
@@ -287,7 +330,7 @@ def to_json(res: ScanResult, git: Optional[GitStats]) -> str:
         },
         "hotspots": [
             {"name": s.name, "path": s.path, "line": s.line, "complexity": s.complexity}
-            for s in rank_hotspots(res, top=15)
+            for s in rank_hotspots(res, top=25)
         ],
         "todos": [
             {"marker": t.marker, "path": t.path, "line": t.line, "text": t.text}
@@ -297,6 +340,8 @@ def to_json(res: ScanResult, git: Optional[GitStats]) -> str:
             {"path": f.path, "code_lines": f.code_lines, "bytes": f.size_bytes}
             for f in sorted(res.files, key=lambda f: f.code_lines, reverse=True)[:15]
         ],
+        "directories": directory_rollup(res),
+        "maintainability_index": maintainability_index(res),
     }
     if git:
         payload["git"] = {
@@ -307,4 +352,87 @@ def to_json(res: ScanResult, git: Optional[GitStats]) -> str:
             "last_commit": git.last_commit,
             "active_days": git.active_days,
         }
-    return json.dumps(payload, indent=2)
+    return payload
+
+
+def to_json(res: ScanResult, git: Optional[GitStats]) -> str:
+    return json.dumps(build_payload(res, git), indent=2)
+
+
+def to_csv(res: ScanResult) -> str:
+    """Per-file CSV: path, language, code, comment, blank, bytes."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["path", "language", "code_lines", "comment_lines", "blank_lines", "bytes"])
+    for f in sorted(res.files, key=lambda f: f.path):
+        w.writerow([f.path, f.language, f.code_lines, f.comment_lines, f.blank_lines, f.size_bytes])
+    return buf.getvalue()
+
+
+def to_sarif(res: ScanResult, min_complexity: int = 10) -> str:
+    """SARIF 2.1.0 so complexity hotspots appear inline in GitHub code scanning."""
+    results = []
+    for s in res.func_scores:
+        if s.complexity < min_complexity:
+            continue
+        level = "error" if s.complexity >= 25 else "warning"
+        results.append({
+            "ruleId": "high-complexity",
+            "level": level,
+            "message": {"text": f"Function '{s.name}' has cyclomatic complexity {s.complexity}."},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": s.path},
+                    "region": {"startLine": max(1, s.line)},
+                }
+            }],
+        })
+    sarif = {
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {"driver": {
+                "name": "repoglance",
+                "informationUri": "https://github.com/SRJ-ai/repoglance",
+                "rules": [{
+                    "id": "high-complexity",
+                    "name": "HighCyclomaticComplexity",
+                    "shortDescription": {"text": "Function exceeds the cyclomatic complexity threshold."},
+                }],
+            }},
+            "results": results,
+        }],
+    }
+    return json.dumps(sarif, indent=2)
+
+
+def compare_snapshots(current: dict, base: dict) -> dict:
+    """Diff two report payloads: metric deltas and per-function regressions."""
+    def worst(payload):
+        hs = payload.get("hotspots", [])
+        return hs[0]["complexity"] if hs else 0
+
+    cur_h = current.get("health", {}).get("score", 0)
+    base_h = base.get("health", {}).get("score", 0)
+
+    base_map = {(h["path"], h["name"]): h["complexity"] for h in base.get("hotspots", [])}
+    regressions = []
+    for h in current.get("hotspots", []):
+        key = (h["path"], h["name"])
+        prev = base_map.get(key)
+        if prev is None or h["complexity"] > prev:
+            regressions.append({
+                "path": h["path"], "name": h["name"],
+                "complexity": h["complexity"], "was": prev,
+            })
+
+    return {
+        "health_delta": cur_h - base_h,
+        "worst_complexity_delta": worst(current) - worst(base),
+        "todo_delta": len(current.get("todos", [])) - len(base.get("todos", [])),
+        "loc_delta": current.get("total_code_lines", 0) - base.get("total_code_lines", 0),
+        "regressions": regressions,
+    }

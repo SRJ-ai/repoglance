@@ -1,0 +1,13 @@
+# Example GitLab CI job — copy into your .gitlab-ci.yml.
+# Fails the pipeline if the health score drops below the threshold and writes a
+# JSON report artifact.
+repoglance:
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir repoglance
+    - repoglance . --json > repoglance.json
+    - repoglance . --ci --fail-under 70 --max-complexity 25
+  artifacts:
+    paths:
+      - repoglance.json
+    when: always
