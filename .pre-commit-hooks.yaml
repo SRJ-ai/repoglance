@@ -1,7 +1,7 @@
-- id: repolens
-  name: repolens health gate
+- id: repoglance
+  name: repoglance health gate
   description: "Analyze the repo and fail if the health score drops below a threshold."
-  entry: repolens
+  entry: repoglance
   args: ["--ci", "--fail-under", "70"]
   language: python
   pass_filenames: false

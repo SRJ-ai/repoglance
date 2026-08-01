@@ -1,4 +1,4 @@
-"""Command-line entry point for repolens."""
+"""Command-line entry point for repoglance."""
 from __future__ import annotations
 
 import sys
@@ -28,7 +28,7 @@ from .scanner import scan
 @click.option("--no-git", is_flag=True, help="Skip git history analysis.")
 @click.option("--max-bytes", default=2_000_000, show_default=True, help="Skip files larger than this many bytes.")
 @click.option("--ignore", multiple=True, help="Extra directory name to ignore (repeatable).")
-@click.version_option(__version__, "-V", "--version", prog_name="repolens")
+@click.version_option(__version__, "-V", "--version", prog_name="repoglance")
 def main(path, as_json, as_md, html_path, svg_path, badge_path, badge_json_path, ci, max_complexity, max_todos, fail_under, no_git, max_bytes, ignore):
     """Instant, gorgeous insight into any code repository.
 

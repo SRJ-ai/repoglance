@@ -1,14 +1,17 @@
-# Releasing repolens
+# Releasing repoglance
 
-Releases publish to [PyPI](https://pypi.org/project/repolens/) automatically
+Releases publish to [PyPI](https://pypi.org/project/repoglance/) automatically
 via GitHub Actions using PyPI's **trusted publisher** (OIDC) — there is no API
 token stored anywhere.
+
+> The PyPI distribution is **`repoglance`**; the GitHub repository is
+> **`SRJ-ai/repolens`**. Keep that distinction in mind below.
 
 ## One-time PyPI setup
 
 1. Sign in to PyPI → **Account → Publishing → Add a pending publisher**.
 2. Fill in:
-   - **PyPI project name:** `repolens`
+   - **PyPI project name:** `repoglance`
    - **Owner:** `SRJ-ai`
    - **Repository:** `repolens`
    - **Workflow name:** `release.yml`
@@ -22,12 +25,12 @@ token stored anywhere.
 ## Cutting a release
 
 1. Bump the version in **both** `pyproject.toml` and
-   `src/repolens/__init__.py` (keep them in sync).
-2. Commit: `git commit -am "release: v0.1.1"`.
+   `src/repoglance/__init__.py` (keep them in sync).
+2. Commit: `git commit -am "release: v0.2.0"`.
 3. Tag and push:
 
    ```bash
-   git tag v0.1.1
+   git tag v0.2.0
    git push origin main --tags
    ```
 

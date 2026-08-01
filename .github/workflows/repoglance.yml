@@ -1,6 +1,6 @@
-name: repolens
+name: repoglance
 
-# Dogfoods the action: on every PR, post a repolens report and enforce a
+# Dogfoods the action: on every PR, post a repoglance report and enforce a
 # minimum health score.
 
 on:

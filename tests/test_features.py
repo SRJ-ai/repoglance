@@ -1,7 +1,7 @@
 import xml.dom.minidom as minidom
 
-from repolens import badge, report
-from repolens.scanner import scan
+from repoglance import badge, report
+from repoglance.scanner import scan
 
 
 def _repo(tmp_path):
@@ -24,7 +24,7 @@ def test_badge_is_well_formed_svg(tmp_path):
     # Must parse as XML and be an <svg> root.
     doc = minidom.parseString(svg)
     assert doc.documentElement.tagName == "svg"
-    assert "repolens" in svg
+    assert "repoglance" in svg
     assert "loc" in svg
 
 
@@ -68,7 +68,7 @@ def test_markdown_report(tmp_path):
     res = _repo(tmp_path)
     md = report.to_markdown(res, None)
     assert md.startswith("### ")
-    assert "repolens report" in md
+    assert "repoglance report" in md
     assert "| Language |" in md
     assert "health" in md
 
@@ -79,12 +79,12 @@ def test_endpoint_json_is_shields_schema(tmp_path):
     res = _repo(tmp_path)
     data = json.loads(badge.endpoint_json(res))
     assert data["schemaVersion"] == 1
-    assert data["label"] == "repolens"
+    assert data["label"] == "repoglance"
     assert "loc" in data["message"]
 
 
 def test_health_score_bounds_and_grade(tmp_path):
-    from repolens import metrics
+    from repoglance import metrics
 
     res = _repo(tmp_path)
     h = metrics.compute(res)

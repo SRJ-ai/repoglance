@@ -1,5 +1,5 @@
-name: "Repolens Repo Insight"
-description: "Analyze a repository and (optionally) post a repolens report as a PR comment or gate the build."
+name: "Repoglance"
+description: "Analyze a repository and (optionally) post a repoglance report as a PR comment or gate the build."
 branding:
   icon: "search"
   color: "blue"
@@ -34,15 +34,15 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install repolens
+    - name: Install repoglance
       shell: bash
       run: python -m pip install --quiet "${{ github.action_path }}"
 
     - name: Job summary + Markdown report
       shell: bash
       run: |
-        repolens "${{ inputs.path }}" --md > "$RUNNER_TEMP/repolens.md"
-        cat "$RUNNER_TEMP/repolens.md" >> "$GITHUB_STEP_SUMMARY"
+        repoglance "${{ inputs.path }}" --md > "$RUNNER_TEMP/repoglance.md"
+        cat "$RUNNER_TEMP/repoglance.md" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Comment on PR
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
@@ -50,9 +50,9 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
       run: |
-        # Sticky comment: edit the existing repolens comment if present, else create.
-        marker="<!-- repolens -->"
-        body="$marker"$'\n'"$(cat "$RUNNER_TEMP/repolens.md")"
+        # Sticky comment: edit the existing repoglance comment if present, else create.
+        marker="<!-- repoglance -->"
+        body="$marker"$'\n'"$(cat "$RUNNER_TEMP/repoglance.md")"
         pr="${{ github.event.pull_request.number }}"
         existing=$(gh api "repos/${{ github.repository }}/issues/$pr/comments" \
           --jq "[.[] | select(.body | startswith(\"$marker\"))][0].id" 2>/dev/null || echo "")
@@ -69,5 +69,5 @@ runs:
         [ -n "${{ inputs.fail-under }}" ] && args="$args --fail-under ${{ inputs.fail-under }}"
         [ -n "${{ inputs.max-complexity }}" ] && args="$args --max-complexity ${{ inputs.max-complexity }}"
         if [ -n "$args" ]; then
-          repolens "${{ inputs.path }}" --ci $args
+          repoglance "${{ inputs.path }}" --ci $args
         fi

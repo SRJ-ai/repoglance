@@ -72,11 +72,11 @@ def render_badge(label: str, message: str, color: str) -> str:
 
 
 def badge_for_scan(res: ScanResult) -> str:
-    """Build a repolens badge summarizing lines of code and top language."""
+    """Build a repoglance badge summarizing lines of code and top language."""
     agg = res.by_language()
     top_lang = max(agg.items(), key=lambda kv: kv[1]["code"])[0] if agg else "code"
     message = f"{_human_loc(res.total_code)} loc • {top_lang}"
-    return render_badge("repolens", message, color_for(top_lang))
+    return render_badge("repoglance", message, color_for(top_lang))
 
 
 def endpoint_json(res: ScanResult) -> str:
@@ -88,7 +88,7 @@ def endpoint_json(res: ScanResult) -> str:
     top_lang = max(agg.items(), key=lambda kv: kv[1]["code"])[0] if agg else "code"
     return json.dumps({
         "schemaVersion": 1,
-        "label": "repolens",
+        "label": "repoglance",
         "message": f"{_human_loc(res.total_code)} loc • {top_lang}",
         "color": "blue",
     })

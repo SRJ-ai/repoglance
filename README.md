@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔍 repolens
+# 🔍 repoglance
 
 ### Instant, gorgeous insight into any code repository — in one command.
 
@@ -12,31 +12,31 @@ activity. **Zero config. Zero API keys. Zero telemetry.**
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![repolens](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)](https://github.com/SRJ-ai/repolens)
+[![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)](https://github.com/SRJ-ai/repolens)
 
 </div>
 
 ---
 
-## Why repolens?
+## Why repoglance?
 
 You clone an unfamiliar repo. What *is* this thing? How big? What's the messy
 part? Where's the unfinished work? `cloc` gives you a wall of numbers. `tokei`
-is fast but bare. `repolens` answers the human questions in one glance:
+is fast but bare. `repoglance` answers the human questions in one glance:
 
 ```bash
-repolens .
+repoglance .
 ```
 
 <div align="center">
 
-![repolens demo](assets/demo.svg)
+![repoglance demo](assets/demo.svg)
 
 </div>
 
 ## Seen in the wild
 
-repolens run against well-known projects (click to view the full report):
+repoglance run against well-known projects (click to view the full report):
 
 | Project | Files | Lines of code | Health |
 |---|--:|--:|:--:|
@@ -53,27 +53,27 @@ repolens run against well-known projects (click to view the full report):
 ## Install
 
 ```bash
-pip install repolens
+pip install repoglance
 ```
 
 Or run without installing:
 
 ```bash
-pipx run repolens .
+pipx run repoglance .
 ```
 
 ## Usage
 
 ```bash
-repolens                       # analyze current directory
-repolens path/to/repo          # analyze another repo
-repolens --json                # machine-readable output for scripts / CI
-repolens --svg report.svg      # export a vector report
-repolens --html report.html    # export a browser report
-repolens --badge badge.svg     # export an embeddable badge
-repolens --ci --max-complexity 25   # fail CI on hotspots
-repolens --no-git              # skip git history
-repolens --ignore dist --ignore fixtures
+repoglance                       # analyze current directory
+repoglance path/to/repo          # analyze another repo
+repoglance --json                # machine-readable output for scripts / CI
+repoglance --svg report.svg      # export a vector report
+repoglance --html report.html    # export a browser report
+repoglance --badge badge.svg     # export an embeddable badge
+repoglance --ci --max-complexity 25   # fail CI on hotspots
+repoglance --no-git              # skip git history
+repoglance --ignore dist --ignore fixtures
 ```
 
 ### JSON output
@@ -81,7 +81,7 @@ repolens --ignore dist --ignore fixtures
 Pipe structured data anywhere — dashboards, CI gates, badges:
 
 ```bash
-repolens --json | jq '.languages.Python.code'
+repoglance --json | jq '.languages.Python.code'
 ```
 
 ## What it measures
@@ -99,11 +99,11 @@ automatically.
 
 ## More than a counter
 
-`repolens` isn't just another `cloc`. Tools like `tokei`, `cloc` and `scc`
-answer *"how many lines?"*. repolens answers *"what should I look at?"* — and
+`repoglance` isn't just another `cloc`. Tools like `tokei`, `cloc` and `scc`
+answer *"how many lines?"*. repoglance answers *"what should I look at?"* — and
 gives you artifacts you can put in a PR or a README.
 
-| | repolens | tokei | scc | cloc |
+| | repoglance | tokei | scc | cloc |
 |---|:---:|:---:|:---:|:---:|
 | Lines-of-code by language | ✅ | ✅ | ✅ | ✅ |
 | Complexity hotspots (per function) | ✅ | ❌ | ⚠️ file-level | ❌ |
@@ -120,16 +120,16 @@ gives you artifacts you can put in a PR or a README.
 Generate a self-contained SVG badge — no shields.io round-trip, no tracking:
 
 ```bash
-repolens --badge assets/badge.svg
+repoglance --badge assets/badge.svg
 ```
 
-![repolens badge](assets/badge.svg)
+![repoglance badge](assets/badge.svg)
 
 Export the full report as a standalone file to drop in a PR or wiki:
 
 ```bash
-repolens --svg report.svg      # vector, pixel-perfect
-repolens --html report.html    # opens in any browser
+repoglance --svg report.svg      # vector, pixel-perfect
+repoglance --html report.html    # opens in any browser
 ```
 
 ## Guard your codebase in CI
@@ -137,13 +137,13 @@ repolens --html report.html    # opens in any browser
 Fail the build when complexity or TODO debt crosses a line:
 
 ```bash
-repolens --ci --max-complexity 25 --max-todos 100
+repoglance --ci --max-complexity 25 --max-todos 100
 ```
 
 ```yaml
 # .github/workflows/quality.yml
-- run: pip install repolens
-- run: repolens --ci --max-complexity 25
+- run: pip install repoglance
+- run: repoglance --ci --max-complexity 25
 ```
 
 Exit code `0` = clean, `2` = a threshold was exceeded.
@@ -152,12 +152,12 @@ Exit code `0` = clean, `2` = a threshold was exceeded.
 
 ### GitHub Action — comment on every PR
 
-Drop repolens into any repo. It posts a sticky report comment on pull requests
+Drop repoglance into any repo. It posts a sticky report comment on pull requests
 and can gate the build:
 
 ```yaml
-# .github/workflows/repolens.yml
-name: repolens
+# .github/workflows/repoglance.yml
+name: repoglance
 on: [pull_request]
 permissions:
   contents: read
@@ -181,9 +181,9 @@ The report also lands in the workflow's **job summary** every run.
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/SRJ-ai/repolens
-    rev: v0.1.1
+    rev: v0.2.0
     hooks:
-      - id: repolens
+      - id: repoglance
         args: ["--ci", "--fail-under", "70"]
 ```
 
@@ -193,17 +193,17 @@ Commit a shields endpoint file and point a dynamic badge at it — the badge
 refreshes itself, no service to run:
 
 ```bash
-repolens --badge-json .repolens-badge.json   # commit this file
+repoglance --badge-json .repolens-badge.json   # commit this file
 ```
 
 ```markdown
-![repolens](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)
+![repoglance](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/SRJ-ai/repolens/main/.repolens-badge.json)
 ```
 
 ### Markdown anywhere
 
 ```bash
-repolens --md   # paste into a PR, wiki, or Slack
+repoglance --md   # paste into a PR, wiki, or Slack
 ```
 
 ## Design goals
@@ -220,4 +220,4 @@ Adding a language is a one-line change in `languages.py`. PRs welcome — see
 
 ## License
 
-[MIT](LICENSE) © repolens contributors
+[MIT](LICENSE) © repoglance contributors

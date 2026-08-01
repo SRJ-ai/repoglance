@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "repolens"
-version = "0.1.1"
+name = "repoglance"
+version = "0.2.0"
 description = "Instant, gorgeous insight into any code repository — languages, complexity hotspots, TODOs and git activity in one terminal command."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "repolens contributors" }]
+authors = [{ name = "repoglance contributors" }]
 keywords = ["cli", "code-analysis", "loc", "cloc", "complexity", "git", "developer-tools", "terminal", "rich"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -34,13 +34,13 @@ Repository = "https://github.com/SRJ-ai/repolens"
 Issues = "https://github.com/SRJ-ai/repolens/issues"
 
 [project.scripts]
-repolens = "repolens.cli:main"
+repoglance = "repoglance.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/repolens"]
+packages = ["src/repoglance"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,6 +1,6 @@
-# Contributing to repolens
+# Contributing to repoglance
 
-Thanks for helping! repolens aims to stay **small, fast, and dependency-light**.
+Thanks for helping! repoglance aims to stay **small, fast, and dependency-light**.
 
 ## Dev setup
 
@@ -12,7 +12,7 @@ python -m pytest -q
 ## Adding a language
 
 Most language support is a one-line change. Add the extension to `EXT_LANG` in
-[`src/repolens/languages.py`](src/repolens/languages.py):
+[`src/repoglance/languages.py`](src/repoglance/languages.py):
 
 ```python
 "kt": "Kotlin",

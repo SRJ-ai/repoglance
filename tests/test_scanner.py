@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from repolens.scanner import scan
+from repoglance.scanner import scan
 
 
 def _make_repo(tmp_path: Path) -> Path:

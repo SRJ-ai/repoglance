@@ -1,4 +1,4 @@
-from repolens.complexity import python_complexity, heuristic_complexity
+from repoglance.complexity import python_complexity, heuristic_complexity
 
 
 def test_straight_line_is_one():
